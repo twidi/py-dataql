@@ -1,6 +1,6 @@
 # py-dataql
 
-Python backend for "Data Query Languages" (like GraphQL and others
+Python backend for "Data Query Languages" (like GraphQL and others)
 
 ## What is it?
 
@@ -62,7 +62,7 @@ This repository provides a [full, but simple, example](example.py)
 This library is available on pypi, but still in alpha version.
 
 ```
-pip install dataql
+pip install dataql==0.0.1a1
 ```
 
 ## Documentation
@@ -89,7 +89,7 @@ SUM:                                     770           2157            522
 --------------------------------------------------------------------------
 ```
 
-You may refer to the (example.py) file for usage.
+You may refer to the [example.py](example.py) file for usage.
 
 
 ## TODO
@@ -100,7 +100,7 @@ This prototype is working as expected, but there is a lot of things to do:
 - write documentation about how to use `dataql` to get data from a query
 - write documentation about how to create its own parser
 - test on the the Django ORM (it should work)
-- create an advanced solver for Django (using `select_related` and `prefetch_related`
+- create an advanced solver for Django (using `select_related` and `prefetch_related`)
 - allow the use of filters that are not attributes of instances, but simple functions
 - allow the retrieval of list or dict entries, not only instance attributes
 - tell me
