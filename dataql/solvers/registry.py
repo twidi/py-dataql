@@ -26,8 +26,108 @@ from dataql.solvers.exceptions import CannotSolve
 from dataql.utils import class_repr, isclass
 
 
-class Attributes(frozenset):
-    """A immutable set of attributes.
+class Attribute:
+    """An object representing an attribute of a class.
+
+    Attributes
+    ----------
+    name : string
+        The name of the attribute
+
+    Notes
+    -----
+    Not really useful for now with only a name, but may contain other attributes later.
+
+    """
+    __slots__ = (
+        'name',
+    )
+
+    def __init__(self, name):
+        """Save the arguments in the object."""
+
+        self.name = name
+
+    def solve(self, value, args=None, kwargs=None):
+        """Try to get the current attribute for the given value.
+
+        If ``args`` or ``kwargs`` are passed, the attribute got from ``value`` must be callable.
+
+        Arguments
+        ---------
+        value : ?
+            The value from which we want the attribute.
+        args : list, default ``None``
+            If defined, list of non-named arguments that will be passed to the attribute if it's
+            callable.
+        kwargs : dict, default ``None``
+            If defined, list of named arguments that will be passed to the attribute if it's
+            callable.
+
+        Returns
+        -------
+        Value of the current attribute for the ``value`` instance.
+
+        Raises
+        ------
+        TypeError
+            If ``args`` or ``kwargs`` are passed and the result is not callable
+
+
+        Example
+        -------
+
+        >>> from datetime import date
+        >>> d = date(2015, 6, 1)
+        >>> s = Source(date, ['day', 'strftime'])
+        >>> Attribute('day').solve(d)
+        1
+        >>> Attribute('strftime').solve(d, ['%F'])
+        '2015-06-01'
+        >>> Attribute('day').solve('a string')
+        Traceback (most recent call last):
+        AttributeError: 'str' object has no attribute 'day'
+        >>> Attribute('day').solve(d, ['foo'])
+        Traceback (most recent call last):
+        TypeError: 'int' object is not callable
+
+        """
+
+        result = getattr(value, self.name)
+
+        # We make a call from the attribute in all cases if we have some arguments.
+        # If we don't have arguments, we still check that the attribute is callable.
+        # If yes and if it's not a class (it will always answer yes for a class), then
+        # we call it.
+        has_args = args is not None or kwargs is not None
+        if has_args or (not isclass(result) and callable(result)):
+            result = result(*(args or []), **(kwargs or {}))
+
+        return result
+
+    def __repr__(self):
+        """String representation of an ``Attribute``.
+
+        Returns
+        -------
+        str
+            The string representation of the current ``Attribute`` instance.
+
+        Example
+        -------
+
+        >>> Attribute('foo')
+        <Attribute 'foo'>
+
+        """
+
+        return "<Attribute '%s'>" % self.name
+
+
+class Attributes(Mapping):
+    """A dict-like object to store the available attributes for a source.
+
+    Attributes
 
     If the set is created empty it will always return ``True`` when checking for
     the presence of an attribute, except if this attribute starts with ``_``.
@@ -41,57 +141,55 @@ class Attributes(frozenset):
     Attributes
     ----------
 
-    contains_all : boolean
+    allow_all : boolean
         ``True`` if no attributes where passed at create time, ``False`` otherwise.
 
     Example
     -------
 
-    >>> a = Attributes(['foo', '_bar'])
+    >>> a = Attributes('foo', '_bar', Attribute(name="qux"))
+    >>> sorted(a.attributes.keys())
+    ['_bar', 'foo', 'qux']
+    >>> a.allow_all
+    False
+    >>> a = Attributes('_bar', allow_all=True)
     >>> 'foo' in a
     True
     >>> '_bar' in a
     True
-    >>> 'baz' in a
+    >>> '_baz' in a
     False
-    >>> a.contains_all
-    False
-    >>> b = Attributes()
-    >>> 'foo' in b
-    True
-    >>> '_bar' in b
-    False
-    >>> 'baz' in b
-    True
-    >>> b.contains_all
-    True
 
     """
 
-    def __new__(cls, *args):
-        """Construct the set with the given attributes.
+    def __init__(self, *args, allow_all=None):
+        """Save attributes, creating ``Attribute`` instances if needed..
 
         Arguments
         ---------
         args : iterable
             A list (or other iterable) containing attributes to be in the set.
-            Don't pass any argument to create a set that will always return ``True`` when
-            checking for the presence of an attribute, except if it starts with ``_``.
 
-        Returns
-        -------
-        Attributes
-            The new created ``Attributes`` instance.
+        allow_all : boolean
+            If ``args`` is empty, will be ``True`` by default.
+            If ``args`` is not empty, will be ``False`` by default.
+            If ``True``, all attributes not in ``args`` will still be valid attributes.
+            In this case, using ``args`` is only useful to add non-class attributes.
 
         """
+        self.attributes = {}
+        self.allow_all = allow_all if allow_all is not None else not bool(args)
 
-        contains_all = False
-        if not args or args == (None,):
-            contains_all = True
-            args = ([],)
-        obj = super().__new__(cls, *args)
-        obj.contains_all = contains_all
-        return obj
+        # Create ``Attribute`` objects if we don't have one
+        for arg in args:
+            if not isinstance(arg, Attribute):
+                if isinstance(arg, str):
+                    # A attribute from its name
+                    arg = Attribute(arg)
+                else:
+                    # We have a list of arguments to use to create an ``Attribute`` instance.
+                    arg = Attribute(*arg)
+            self.attributes[arg.name] = arg
 
     def __contains__(self, attribute):
         """Tells if the set contains the given attribute.
@@ -104,16 +202,150 @@ class Attributes(frozenset):
         Returns
         -------
         boolean
-            ``True`` if the item is in the set (or, if the set was created empty, if it
-            doesn't start with ``_``, ``False`` otherwise.
+            If ``allow_all`` is ``False``, will return ``True`` only if the attribute
+            is in the list of registered attribute.
+            If ``allow_all`` is ``True``, will always return ``True`` except if the
+            attribute is "private", ie starts by a "_".
+
+        Example
+        -------
+
+        >>> a = Attributes('foo', '_bar', Attribute(name="qux"))
+        >>> 'foo' in a
+        True
+        >>> '_bar' in a
+        True
+        >>> 'baz' in a
+        False
+        >>> 'qux' in a
+        True
+        >>> a = Attributes('_bar', allow_all=True)
+        >>> 'foo' in a
+        True
+        >>> '_bar' in a
+        True
+        >>> '_baz' in a
+        False
+        >>> b = Attributes()
+        >>> 'foo' in b
+        True
+        >>> '_bar' in b
+        False
+        >>> 'baz' in b
+        True
 
         """
 
-        if not self.contains_all:
-            return super().__contains__(attribute)
-        if attribute.startswith('_'):
+        # Always ok if we have the attribute.
+        if attribute in self.attributes:
+            return True
+
+        # We don't have the attribute but don't allow the others.
+        if not self.allow_all:
             return False
-        return True
+
+        # We allow all other attributes, except private ones.
+        return not attribute.startswith('_')
+
+    def __getitem__(self, attribute):
+        """Get the ``Attribute`` instance for the given attribute name.
+
+        Arguments
+        ---------
+        attribute : string
+            The name of the attribute we want.
+
+        Returns
+        -------
+        Attribute
+            The ``Attribute`` instance that matches the given attribute.
+
+        Raises
+        ------
+        KeyError
+            If the given attribute is not available.
+
+        Example
+        -------
+
+        >>> a = Attributes('foo', '_bar', Attribute(name="qux"))
+        >>> a['foo']
+        <Attribute 'foo'>
+        >>> a = Attributes('foo', '_bar', allow_all=True)
+        >>> a['qux']
+        <Attribute 'qux'>
+        >>> a['_baz']
+        Traceback (most recent call last):
+        KeyError: '_baz'
+
+        """
+
+        # Main check
+        if attribute not in self:
+            raise KeyError(attribute)
+
+        # Create a ``Attribute`` object if ``allow_all`` is ``True`` and we don't have
+        # one yet for the asked attribute.
+        if self.allow_all and attribute not in self.attributes:
+            self.attributes[attribute] = Attribute(attribute)
+
+        return self.attributes[attribute]
+
+    def __iter__(self):
+        """Iterate over the attributes.
+
+        As ``Attributes`` is a dict-like object, iterating over it only returns keys.
+        To iterate over values, ie ``Attribute`` instances, use for example ``.values()`` or
+        ``.items()``.
+
+        Returns
+        -------
+        iterator
+            An iterator over the keys (ie classes) in the registry.
+
+        Example
+        -------
+
+        >>> a = Attributes('foo', '_bar', Attribute(name="qux"))
+        >>> for attr in sorted(a): print(attr)
+        _bar
+        foo
+        qux
+        >>> for attr in sorted(a.keys()): print(attr)
+        _bar
+        foo
+        qux
+        >>> from operator import attrgetter
+        >>> for attr in sorted(a.values(), key=attrgetter('name')): print(attr)
+        <Attribute '_bar'>
+        <Attribute 'foo'>
+        <Attribute 'qux'>
+        >>> for name, attr in sorted(a.items()): print('%s : %s' % (name, attr))
+        _bar : <Attribute '_bar'>
+        foo : <Attribute 'foo'>
+        qux : <Attribute 'qux'>
+
+
+        """
+
+        return iter(self.attributes)
+
+    def __len__(self):
+        """Returns the number of ``Attribute`` objects actually stored.
+
+        Example
+        -------
+
+        >>> a = Attributes('foo', '_bar', Attribute(name="qux"))
+        >>> len(a)
+        3
+        >>> a = Attributes('foo', '_bar', allow_all=True)
+        >>> len(a)
+        2
+
+        """
+
+        return len(self.attributes)
 
 
 class BaseEntryPoints:
@@ -212,8 +444,8 @@ class Source:
             A list (or other iterable) of string representing the names of the allowed
             attributes from the source.
             Can also be an ``Attributes`` instance.
-            If not set, all attributes for this source will be allowed, except private ones
-            (starting with ``_``)
+            To allow all attributes, you must pass an ``Attributes`` instance with
+            ``allow_all=True``.
         allow_class : boolean, default ``False``
             If set to ``True``, the source apply not only to instances of the source class, but
             also to the class itself.
@@ -237,7 +469,7 @@ class Source:
             raise Exception('Source must be a class')
         self.source = source
         if not isinstance(attributes, Attributes):
-            attributes = Attributes(attributes)
+            attributes = Attributes(*(attributes or []))
         self.attributes = attributes
         self.allow_class = allow_class
         self.allow_subclasses = allow_subclasses
@@ -257,8 +489,7 @@ class Source:
         -------
 
         >>> from datetime import date
-        >>> s = Source(date)
-        >>> s
+        >>> Source(date)
         <Source 'datetime.date'>
 
         """
@@ -282,6 +513,7 @@ class Source:
         kwargs : dict, default ``None``
             If defined, list of named arguments that will be passed to the attribute if it's
             callable.
+
         Returns
         -------
         Value of the ``attribute`` for the ``value`` instance.
@@ -321,27 +553,20 @@ class Source:
                 not self.allow_class or value is not self.source):
             raise Exception('Source `%s` cannot solve `%s`' % (class_repr(self.source), value))
 
-        if attribute not in self.attributes:
-            found_in_parent = False
+        attr = None
+        if attribute in self.attributes:
+            attr = self.attributes[attribute]
+        else:
             for parent_source in self.parent_sources:
                 if attribute in parent_source.attributes:
-                    found_in_parent = True
+                    attr = parent_source.attributes[attribute]
                     break
 
-            if not found_in_parent:
+            if attr is None:
                 raise Exception('`%s` is not an allowed attribute for source `%s`' % (
                     attribute, class_repr(self.source)))
 
-        attr = getattr(value, attribute)
-
-        # We make a call from the attribute in all cases if we have some arguments.
-        # If we don't have arguments, we still check that the attribute is callable.
-        # If yes and if it's not a class (it will always answer yes for a class), then
-        # we call it.
-        if args is not None or kwargs is not None or (not isclass(attr) and callable(attr)):
-            attr = attr(*(args or []), **(kwargs or {}))
-
-        return attr
+        return attr.solve(value, args, kwargs)
 
 
 class Registry(Mapping):
@@ -383,7 +608,7 @@ class Registry(Mapping):
     solvers = (AttributeSolver, ObjectSolver, ListSolver)
 
     def __init__(self):
-        """Init the sources as an empty dictionnary."""
+        """Init the sources as an empty dictionary."""
 
         self.sources = {}
 
@@ -399,8 +624,8 @@ class Registry(Mapping):
             A list (or other iterable) of string representing the names of the allowed
             attributes from the source.
             Can also be an ``Attributes`` instance.
-            If not set, all attributes for this source will be allowed, except private ones
-            (starting with ``_``)
+            To allow all attributes, you must pass an ``Attributes`` instance with
+            ``allow_all=True``.
         allow_class : boolean, default ``False``
             If set to ``True``, the source apply not only to instances of the source class, but
             also to the class itself.
