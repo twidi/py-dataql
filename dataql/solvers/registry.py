@@ -2,8 +2,9 @@
 
 A registry is the main entry point to solve dataql resources.
 
-Simply create a registry, register classes with allowed attributes, some entry points,
-and use the ``solve`` method to get the result value from a main value and a resource.
+Simply create a registry, register classes with allowed attributes (which can also be
+standalone functions), some entry points, and use the ``solve`` method to get the result value
+from a main value and a resource.
 
 Example
 -------
@@ -27,31 +28,36 @@ from dataql.utils import class_repr, isclass
 
 
 class Attribute:
-    """An object representing an attribute of a class.
+    """An object representing an attribute of a class or a standalone function.
 
     Attributes
     ----------
     name : string
         The name of the attribute
-
-    Notes
-    -----
-    Not really useful for now with only a name, but may contain other attributes later.
+    function : function
+        A function to execute instead of getting the name from the attribute.
+        This function should accept the value as the first argument (the value from which we
+        would normally have got the attribute). If the function you want to use does not follow
+        this rule, you can use lambdas or partials.
 
     """
     __slots__ = (
         'name',
+        'function',
     )
 
-    def __init__(self, name):
+    def __init__(self, name, function=None):
         """Save the arguments in the object."""
 
         self.name = name
+        self.function = function
 
     def solve(self, value, args=None, kwargs=None):
-        """Try to get the current attribute for the given value.
+        """Try to get the current attribute/function result for the given value.
 
         If ``args`` or ``kwargs`` are passed, the attribute got from ``value`` must be callable.
+        They will be passed anyway (using ``[]`` and ``{}`` as default values) if the attribute
+        is a function.
 
         Arguments
         ---------
@@ -66,12 +72,14 @@ class Attribute:
 
         Returns
         -------
-        Value of the current attribute for the ``value`` instance.
+        Value of the current attribute/function result for the ``value`` instance.
 
         Raises
         ------
         TypeError
-            If ``args`` or ``kwargs`` are passed and the result is not callable
+            If ``args`` or ``kwargs`` are passed and the result is not callable (only if the
+            attribute is not a function, in the other case, it depends on the arguments passed
+            vs the arguments expected)
 
 
         Example
@@ -90,9 +98,17 @@ class Attribute:
         >>> Attribute('day').solve(d, ['foo'])
         Traceback (most recent call last):
         TypeError: 'int' object is not callable
+        >>> Attribute('str', function=str).solve(d)
+        '2015-06-01'
 
         """
 
+        # If we have a function, apply this, using the value as first argument,
+        # then args and kwargs.
+        if self.function:
+            return self.function(value, *(args or []), **(kwargs or {}))
+
+        # Manage a normal attribute.
         result = getattr(value, self.name)
 
         # We make a call from the attribute in all cases if we have some arguments.
@@ -118,10 +134,15 @@ class Attribute:
 
         >>> Attribute('foo')
         <Attribute 'foo'>
+        >>> Attribute('bar', str)
+        <Attribute(function) 'bar'>
 
         """
 
-        return "<Attribute '%s'>" % self.name
+        return "<Attribute%s '%s'>" % (
+            '(function)' if self.function else '',
+            self.name
+        )
 
 
 class Attributes(Mapping):
@@ -152,8 +173,10 @@ class Attributes(Mapping):
     ['_bar', 'foo', 'qux']
     >>> a.allow_all
     False
-    >>> a = Attributes('_bar', allow_all=True)
+    >>> a = Attributes('_bar', Attribute('str', str), allow_all=True)
     >>> 'foo' in a
+    True
+    >>> 'str' in a
     True
     >>> '_bar' in a
     True
@@ -174,7 +197,8 @@ class Attributes(Mapping):
             If ``args`` is empty, will be ``True`` by default.
             If ``args`` is not empty, will be ``False`` by default.
             If ``True``, all attributes not in ``args`` will still be valid attributes.
-            In this case, using ``args`` is only useful to add non-class attributes.
+            In this case, using ``args`` is only useful to add non-class attributes (like
+            standalone functions).
 
         """
         self.attributes = {}
@@ -418,12 +442,14 @@ class Source:
 
     >>> from datetime import date
     >>> d = date(2015, 6, 1)
-    >>> s = Source(date, ['day', 'today'])
+    >>> s = Source(date, ['day', 'today', ('str', str)])
     >>> s.solve(d, 'day')
     1
     >>> s.solve(date, 'today')
     Traceback (most recent call last):
     Exception: Source `datetime.date` cannot solve `<class 'datetime.date'>`
+    >>> s.solve(d, 'str')
+    '2015-06-01'
     >>> s = Source(date, ['day', 'today'], allow_class=True)
     >>> s.solve(d, 'day')
     1
@@ -497,9 +523,11 @@ class Source:
         return "<Source '%s'>" % class_repr(self.source)
 
     def solve(self, value, attribute, args=None, kwargs=None):
-        """Try to get the given attribute for the given value.
+        """Try to get the given attribute/function result for the given value.
 
         If ``args`` or ``kwargs`` are passed, the attribute got from ``value`` must be callable.
+        They will be passed anyway (using ``[]`` and ``{}`` as default values) if the attribute
+        is a function.
 
         Arguments
         ---------
@@ -516,7 +544,7 @@ class Source:
 
         Returns
         -------
-        Value of the ``attribute`` for the ``value`` instance.
+        Value of the current attribute/function result for the ``value`` instance.
 
         Raises
         ------
@@ -525,17 +553,21 @@ class Source:
         Exception
             When the attribute is not allowed
         TypeError
-            If ``args`` or ``kwargs`` are passed and the result is not callable
+            If ``args`` or ``kwargs`` are passed and the result is not callable (only if the
+            attribute is not a function, in the other case, it depends on the arguments passed
+            vs the arguments expected)
 
         Example
         -------
 
         >>> from datetime import date
         >>> d = date(2015, 6, 1)
-        >>> s = Source(date, ['day', 'strftime'])
+        >>> s = Source(date, ['day', 'strftime', ('str', str)])
         >>> s.solve(d, 'day')
         1
         >>> s.solve(d, 'strftime', ['%F'])
+        '2015-06-01'
+        >>> s.solve(d, 'str')
         '2015-06-01'
         >>> s.solve('a string', ['day'])
         Traceback (most recent call last):
