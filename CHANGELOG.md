@@ -5,6 +5,7 @@ This project adheres to [PEP 440 about versioning](https://www.python.org/dev/pe
 ## [Unreleased][unreleased]
 ### Added
 - Ability to use standalone functions in addition to attributes.
+- Better management of instances of objects with a `__call__` method.
 
 ## [0.0.1a1] - 2015-06-15
 - First working version
