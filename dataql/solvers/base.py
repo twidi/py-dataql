@@ -13,6 +13,7 @@ When we talk about "resources", we talk about instances of classes defined in ``
 from collections import Iterable
 
 from dataql.resources import NamedArg, PosArg, Field, Filter, Object, List
+from dataql.utils import class_repr
 
 
 class Solver:
@@ -49,6 +50,31 @@ class Solver:
 
         self.registry = registry
         self.source = self.registry[source]
+
+    def __repr__(self):
+        """String representation of a ``Solver`` instance.
+
+        Returns
+        -------
+        str
+            The string representation of the current ``Solver`` instance.
+
+        Example
+        -------
+
+        >>> from dataql.solvers.registry import Registry
+        >>> registry = Registry()
+        >>> from datetime import date
+        >>> registry.register(date, allow_class=True)
+        >>> Solver(registry, date)
+        <Solver for source `datetime.date`>
+
+        """
+
+        return '<%s for source `%s`>' % (
+            self.__class__.__name__,
+            class_repr(self.source.source)
+        )
 
     def solve_resource(self, value, resource):
         """Solve a resource with a value.

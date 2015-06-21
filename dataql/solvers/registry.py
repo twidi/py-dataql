@@ -53,6 +53,30 @@ class Attribute:
         self.name = name
         self.function = function
 
+    def __repr__(self):
+        """String representation of an ``Attribute`` instance.
+
+        Returns
+        -------
+        str
+            The string representation of the current ``Attribute`` instance.
+
+        Example
+        -------
+
+        >>> Attribute('foo')
+        <Attribute 'foo'>
+        >>> Attribute('bar', str)
+        <Attribute(function) 'bar'>
+
+        """
+
+        return "<%s%s '%s'>" % (
+            self.__class__.__name__,
+            '(function)' if self.function else '',
+            self.name
+        )
+
     def solve(self, value, args=None, kwargs=None):
         """Try to get the current attribute/function result for the given value.
 
@@ -250,29 +274,6 @@ class Attribute:
 
         return result
 
-    def __repr__(self):
-        """String representation of an ``Attribute``.
-
-        Returns
-        -------
-        str
-            The string representation of the current ``Attribute`` instance.
-
-        Example
-        -------
-
-        >>> Attribute('foo')
-        <Attribute 'foo'>
-        >>> Attribute('bar', str)
-        <Attribute(function) 'bar'>
-
-        """
-
-        return "<Attribute%s '%s'>" % (
-            '(function)' if self.function else '',
-            self.name
-        )
-
 
 class Attributes(Mapping):
     """A dict-like object to store the available attributes for a source.
@@ -348,6 +349,29 @@ class Attributes(Mapping):
                     # We have a list of arguments to use to create an ``Attribute`` instance.
                     arg = self.Attribute(*arg)
             self.attributes[arg.name] = arg
+
+    def __repr__(self):
+        """String representation of an ``Attributes`` instance.
+
+        Returns
+        -------
+        str
+            The string representation of the current ``Attributes`` instance.
+
+        Example
+        -------
+
+        >>> Attributes('foo')
+        <Attributes>
+        >>> Attributes('bar', allow_all=True)
+        <Attributes(allow all)>
+
+        """
+
+        return "<%s%s>" % (
+            self.__class__.__name__,
+            '(allow all)' if self.allow_all else '',
+        )
 
     def __contains__(self, attribute):
         """Tells if the set contains the given attribute.
@@ -643,7 +667,7 @@ class Source:
         self.parent_sources = parent_sources or set()
 
     def __repr__(self):
-        """String representation of a ``Source``.
+        """String representation of a ``Source`` instance.
 
         Returns
         -------
@@ -659,7 +683,10 @@ class Source:
 
         """
 
-        return "<Source '%s'>" % class_repr(self.source)
+        return "<%s '%s'>" % (
+            self.__class__.__name__,
+            class_repr(self.source)
+        )
 
     def solve(self, value, attribute, args=None, kwargs=None):
         """Try to get the given attribute/function result for the given value.
@@ -787,6 +814,26 @@ class Registry(Mapping):
         """Init the sources as an empty dictionary."""
 
         self.sources = {}
+
+    def __repr__(self):
+        """String representation of a ``Registry`` instance.
+
+        Returns
+        -------
+        str
+            The string representation of the current ``Attributes`` instance.
+
+        Example
+        -------
+
+        >>> Registry()
+        <Registry>
+
+        """
+
+        return '<%s>' % (
+            self.__class__.__name__
+        )
 
     def register(self, source, attributes=None, allow_class=False, allow_subclasses=True,
                  propagate_attributes=True, inherit_attributes=True):
