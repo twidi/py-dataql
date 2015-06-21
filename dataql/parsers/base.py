@@ -142,18 +142,18 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         Instance of the ``parsimonious.Grammar`` class that holds the compiled grammar.
     grammar_str : str
         String representation of the ``grammar`.
-    Field : class
+    Field : class (class attribute)
         The class to use as a ``Field`` resource. Default to ``dataql.resources.Field``.
-    Object : class
+    Object : class (class attribute)
         The class to use as a ``Object`` resource. Default to ``dataql.resources.Object``.
-    List : class
+    List : class (class attribute)
         The class to use as a ``List`` resource. Default to ``dataql.resources.List``.
-    Filter : class
+    Filter : class (class attribute)
         The class to use as a ``Filter``. Default to ``dataql.resources.Filter``.
-    NamedArg : class
+    NamedArg : class (class attribute)
         The class to use as a ``NamedArg`` (named argument). Default to
         ``dataql.resources.NamedArg``.
-    PosArg : class
+    PosArg : class (class attribute)
         The class to use as a ``PosArg`` (positioned argument). Default to
         ``dataql.resources.PosArg``.
 

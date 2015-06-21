@@ -293,6 +293,9 @@ class Attributes(Mapping):
 
     allow_all : boolean
         ``True`` if no attributes where passed at create time, ``False`` otherwise.
+    Attribute : class (class attribute)
+        The class to use as for ``Attribute`` objects. Default to
+        ``dataql.solvers.registry.Attribute``.
 
     Example
     -------
@@ -313,6 +316,8 @@ class Attributes(Mapping):
     False
 
     """
+
+    Attribute = Attribute
 
     def __init__(self, *args, allow_all=None):
         """Save attributes, creating ``Attribute`` instances if needed..
@@ -338,10 +343,10 @@ class Attributes(Mapping):
             if not isinstance(arg, Attribute):
                 if isinstance(arg, str):
                     # A attribute from its name
-                    arg = Attribute(arg)
+                    arg = self.Attribute(arg)
                 else:
                     # We have a list of arguments to use to create an ``Attribute`` instance.
-                    arg = Attribute(*arg)
+                    arg = self.Attribute(*arg)
             self.attributes[arg.name] = arg
 
     def __contains__(self, attribute):
@@ -440,7 +445,7 @@ class Attributes(Mapping):
         # Create a ``Attribute`` object if ``allow_all`` is ``True`` and we don't have
         # one yet for the asked attribute.
         if self.allow_all and attribute not in self.attributes:
-            self.attributes[attribute] = Attribute(attribute)
+            self.attributes[attribute] = self.Attribute(attribute)
 
         return self.attributes[attribute]
 
@@ -565,6 +570,9 @@ class Source:
     parent_sources : set
         If ``inherit_attributes`` is ``True``, this set will hold all the sources that are
         parent of the current one.
+    Attributes : class (class attribute)
+        The class to use as for ``Attributes`` (to store the available attributes). Default to
+        ``dataql.solvers.registry.Attributes``.
 
     Example
     -------
@@ -586,6 +594,8 @@ class Source:
     True
 
     """
+
+    Attributes = Attributes
 
     def __init__(self, source, attributes=None, allow_class=False, allow_subclasses=True,
                  propagate_attributes=True, inherit_attributes=True, parent_sources=None):
@@ -624,7 +634,7 @@ class Source:
             raise Exception('Source must be a class')
         self.source = source
         if not isinstance(attributes, Attributes):
-            attributes = Attributes(*(attributes or []))
+            attributes = self.Attributes(*(attributes or []))
         self.attributes = attributes
         self.allow_class = allow_class
         self.allow_subclasses = allow_subclasses
@@ -748,6 +758,9 @@ class Registry(Mapping):
         List of solver classes to use for solving a (value, resource) couple. The order is
         important because the first one that returns ``True`` to a call to its ``can_solve``
         method will be used.
+    Source : class (class attribute)
+        The class to use as for ``Source`` (to store each registered source). Default to
+        ``dataql.solvers.registry.Source``.
 
     Example
     -------
@@ -767,6 +780,8 @@ class Registry(Mapping):
     """
 
     solvers = (AttributeSolver, ObjectSolver, ListSolver)
+
+    Source = Source
 
     def __init__(self):
         """Init the sources as an empty dictionary."""
@@ -840,8 +855,10 @@ class Registry(Mapping):
                 if klass in self.sources and self.sources[klass].propagate_attributes:
                     parent_sources.add(self.sources[klass])
 
-        self.sources[source] = Source(source, attributes, allow_class, allow_subclasses,
-                                      propagate_attributes, inherit_attributes, parent_sources)
+        self.sources[source] = self.Source(
+            source, attributes, allow_class, allow_subclasses,
+            propagate_attributes, inherit_attributes, parent_sources
+        )
 
         # Propagate attributes to existing subclasses
         if propagate_attributes:
