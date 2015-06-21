@@ -107,8 +107,14 @@ This prototype is working as expected, but there is a lot of things to do:
 
 ## Tests
 
-There is no external tests for now but there are a lot of examples in the classes and method
-docstrings that are valid (and passing!) doctests
+There are no external tests for now but there are a lot of examples in the classes and method
+docstrings that are valid (and passing!) doctests.
+
+You can launch all these doctests this way (at the root of the repository) :
+
+```sh
+./run_tests.sh
+```
 
 ## Python version
 
