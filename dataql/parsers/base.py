@@ -13,10 +13,11 @@ import re
 import sys
 
 from parsimonious import Grammar, NodeVisitor
-from parsimonious.exceptions import VisitationError, UndefinedLabel
+from parsimonious.exceptions import ParseError, UndefinedLabel, VisitationError
 from parsimonious.nodes import RuleDecoratorMeta as BaseRuleDecoratorMeta
 
 from dataql import resources
+from dataql.parsers.exceptions import ParserError
 
 
 def rule(rule_string):
@@ -245,6 +246,11 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         >>> parser.data
         'foo'
 
+        Raises
+        ------
+        ParserError
+            When the parser originally raised a ``parsimonious.exceptions.ParseError`` exception.
+
         """
 
         # If we want another default rule, it will create a new grammar object.
@@ -252,7 +258,11 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
             self.grammar = self.grammar.default(default_rule)
 
         # Parse the text and save the resource in the ``data`` attribute.
-        self.data = self.parse(text)
+        try:
+            self.data = self.parse(text)
+        except ParseError as ex:
+            # Raise our own exception with a more user friendly message
+            raise ParserError(ex)
 
     def visit(self, node):
         """Rewrite original method to use lower-case method, and not "generic" function."""
@@ -316,10 +326,10 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         'foo1'
         >>> BaseParser('1foo', default_rule='IDENT').data # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-        parsimonious.exceptions.ParseError:
+        dataql.parsers.exceptions.ParserError:
         >>> BaseParser('foo-bar', default_rule='IDENT').data # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-        parsimonious.exceptions.IncompleteParseError:
+        dataql.parsers.exceptions.ParserError:
 
         """
 

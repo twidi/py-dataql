@@ -37,7 +37,7 @@ class SolverObjectException(SolversException, metaclass=ABCMeta):
 class CannotSolve(SolverObjectException):
     """Exception raised when a solver accepts to solve a resource but is not able to do it.
 
-    This exception string expose the name and class of the solver and the resource.
+    This exception string exposes the name and class of the solver and the resource.
 
     Attributes
     ---------
@@ -317,7 +317,7 @@ class SolverNotFound(RegistryException):
 class SolveFailure(RegistryException):
     """Exception raised when no solver was able to solve a (resource, value) couple.
 
-    This exception string expose the name and class of the solver and the resource.
+    This exception string exposes the name and class of the solver and the resource.
 
     Attributes
     ---------

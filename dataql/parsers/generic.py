@@ -5,7 +5,10 @@ provided by the ``dataql`` library.
 
 """
 
+from parsimonious import IncompleteParseError
+
 from dataql.parsers.base import BaseParser, rule
+from dataql.parsers.exceptions import ParserError
 from dataql.parsers.mixins import FiltersParserMixin
 
 
@@ -37,6 +40,41 @@ class DataQLParser(FiltersParserMixin, BaseParser):
     """
 
     default_rule = 'ROOT'
+
+    def __init__(self, text, default_rule=None):
+        """Override to try to get better error message.
+
+        Below an example of the better message
+
+        Example
+        -------
+
+        # First with a parser that will not try to get a better error message
+        >>> query = 'foo {bar::baz}'
+        >>> class WillNotDebugParser(DataQLParser):
+        ...     debugging = True  # Will not try to debug, because marked as debugging
+        >>> WillNotDebugParser(query) # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+        dataql...ParserError:...line 1, column 5...text begins with: "{bar::baz}"
+
+        # Now with a parser that will try to get a better error message
+        >>> DataQLParser(query) # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+        dataql...ParserError:...line 1, column 9...text begins with: "::baz}"
+
+
+        """
+        try:
+            super().__init__(text, default_rule)
+        except ParserError as ex:
+            # If we are not yet in debugging mode, and the problem is at ROOT,
+            # enter the debugging mode to expect a better error
+            if not getattr(self, 'debugging', False) and ex.original_exception.expr.name == 'ROOT':
+                DebugDataQLParser(text, default_rule)
+
+            # If we were already in debugging mode, or the error happened not at the ROOT,
+            # or the debugger didn't raise an exception, raise the original error.
+            raise
 
     @rule('WS NAMED_RESOURCE WS')
     def visit_root(self, _, children):
@@ -468,3 +506,33 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         """
 
         return self.filters_to_resource(children[0], self.List, resources=children[2])
+
+
+class DebugDataQLParser(DataQLParser):
+    """Parser to use to get better error for ``IncompleteParseError`` exceptions.
+
+    If the root resource is a list or an object but there is an error, ``parsimonious``
+    choose the third resource type, the field, and ignore the rest of the query starting at
+    ``[`` or ``{``, raising an ``IncompleteParseError``.
+
+    This parser extends the ``DataQLParser`` by allowing only list or object as the first
+    resource, to try to get a better error.
+
+    """
+
+    debugging = True
+
+    @rule('WS NAMED_ROOT_RESOURCE WS')
+    def visit_root(self, *args):
+        """Override the ROOT rule to accept a NAMED_ROOT_RESOURCE instead of a NAMED_RESOURCE."""
+        return super().visit_root(*args)
+
+    @rule('OPTIONAL_RESOURCE_NAME ROOT_RESOURCE')
+    def visit_named_root_resource(self, *args):
+        """New rule to accept as ROOT rule a optional name and a ROOT_RESOURCE."""
+        return super().visit_named_resource(*args)
+
+    @rule('LIST / OBJECT')
+    def visit_root_resource(self, *args):
+        """New rule to accept only LIST or OBJECT as root resource."""
+        return super().visit_resource(*args)

@@ -96,7 +96,7 @@ You may refer to the [example.py](example.py) file for usage.
 
 This prototype is working as expected, but there is a lot of things to do:
 
-- create subclasses for exceptions
+- ~~create subclasses for exceptions~~
 - write documentation about how to use `dataql` to get data from a query
 - write documentation about how to create its own parser
 - test on the the Django ORM (it should work)
