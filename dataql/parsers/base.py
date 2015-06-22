@@ -264,7 +264,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
             raise VisitationError(exc, exc_class, node).with_traceback(tb)
 
     @rule('~"[_A-Z][_A-Z0-9]*"i')
-    def visit_ident(self, node, children):
+    def visit_ident(self, node, _):
         """Return a valid python identifier.
 
         It may be used for a resource name, a filter...
@@ -272,7 +272,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         Arguments
         ---------
         node : parsimonious.nodes.Node.
-        children : list, unused
+        _ (children) : list, unused
 
         Result
         ------
@@ -305,13 +305,13 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return node.text
 
     @rule('COL_OR_EQ')
-    def visit_oper(self, node, children):
+    def visit_oper(self, node, _):
         """Return an operator as a string. Currently only "=" and ":" (both synonyms)
 
         Arguments
         ---------
         node : parsimonious.nodes.Node.
-        children : list, unused
+        _ (children) : list, unused
 
         Result
         ------
@@ -334,12 +334,12 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return oper
 
     @rule('STR / NB / NULL / FALSE / TRUE')
-    def visit_value(self, node, children):
+    def visit_value(self, _, children):
         """Return a value, which is a string, a number, a null/false/true like value.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: the value to return
 
@@ -368,7 +368,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return children[0]
 
     @rule(r'~"([\'\"])(?:[^\\1\\\\]|\\\\.)*?\\1"')
-    def visit_str(self, node, children):
+    def visit_str(self, node, _):
         """Regex rule for quoted string allowing escaped quotes inside.
 
         Arguments
@@ -410,8 +410,8 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
     # regex  to unquote single quote characters
     visit_str.re_single_backslash = re.compile(r'(?<!\\)\\')
 
-    @rule('~"[-+]?\d*\.?\d+([eE][-+]?\d+)?"')
-    def visit_nb(self, node, children):
+    @rule(r'~"[-+]?\d*\.?\d+([eE][-+]?\d+)?"')
+    def visit_nb(self, node, _):
         """Return a int of float from the given number.
 
         Also work with scientific notation like 1e+50.
@@ -450,13 +450,13 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return self.convert_nb(node.text)
 
     @rule('~"(?:null|nil|none)"i')
-    def visit_null(self, node, children):
+    def visit_null(self, *_):
         """Return ``None`` for the string "null", "none", or "nil" (case insensitive)
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
-        children : list, unused
+        _[0] (node) : parsimonious.nodes.Node.
+        _[1] (children) : list, unused
 
         Returns
         -------
@@ -489,13 +489,13 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return None
 
     @rule('~"(?:false)"i')
-    def visit_false(self, node, children):
+    def visit_false(self, *_):
         """Return ``False`` for the string "false" (case insensitive)
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
-        children : list, unused
+        _[0] (node) : parsimonious.nodes.Node.
+        _[1] (children) : list, unused
 
         Returns
         -------
@@ -516,13 +516,13 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return False
 
     @rule('~"(?:true)"i')
-    def visit_true(self, node, children):
+    def visit_true(self, *_):
         """Return ``True`` for the string "true" (case insensitive)
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
-        children : list, unused
+        _[0] (node) : parsimonious.nodes.Node.
+        _[1] (children) : list, unused
 
         Returns
         -------
