@@ -12,7 +12,9 @@ When we talk about "resources", we talk about instances of classes defined in ``
 
 from collections import Iterable
 
-from dataql.resources import NamedArg, PosArg, Field, Filter, Object, List
+from dataql.resources import Field, Filter, List, NamedArg, Object, PosArg
+from dataql.solvers.exceptions import NotIterable
+from dataql.utils import class_repr
 
 
 class Solver:
@@ -50,6 +52,31 @@ class Solver:
         self.registry = registry
         self.source = self.registry[source]
 
+    def __repr__(self):
+        """String representation of a ``Solver`` instance.
+
+        Returns
+        -------
+        str
+            The string representation of the current ``Solver`` instance.
+
+        Example
+        -------
+
+        >>> from dataql.solvers.registry import Registry
+        >>> registry = Registry()
+        >>> from datetime import date
+        >>> registry.register(date, allow_class=True)
+        >>> Solver(registry, date)
+        <Solver for source `datetime.date`>
+
+        """
+
+        return '<%s for source `%s`>' % (
+            self.__class__.__name__,
+            class_repr(self.source.source)
+        )
+
     def solve_resource(self, value, resource):
         """Solve a resource with a value.
 
@@ -65,6 +92,12 @@ class Solver:
         Returns
         -------
         (depends on the implementation of the ``cast`` method.
+
+        Raises
+        ------
+        CannotSolve
+            If a solver accepts to solve a resource but cannot finally solve it.
+            Allows ``Registry.solve`` to use the next available solver.
 
         Notes
         -----
@@ -111,6 +144,13 @@ class Solver:
         ...     ]
         ... ))
         '2015-06-01'
+
+        # Example of how to raise a ``CannotSolve`` exception.
+        >>> from dataql.solvers.exceptions import CannotSolve
+        >>> raise CannotSolve(solver, Field('fromtimestamp'), date)
+        Traceback (most recent call last):
+        dataql.solvers.exceptions.CannotSolve: Solver `<Solver for source `datetime.date`>` \
+was not able to solve resource `<Field[fromtimestamp]>`.
 
         """
 
@@ -396,6 +436,7 @@ class ListSolver(MultiResourcesBaseSolver):
         >>> from dataql.solvers.registry import EntryPoints
         >>> obj = EntryPoints(registry,
         ...     dates = [date(2015, 6, 1), date(2015, 6, 2)],
+        ...     date = date(2015, 6, 1),
         ... )
 
         >>> solver = ListSolver(registry, obj.__class__)
@@ -406,6 +447,14 @@ class ListSolver(MultiResourcesBaseSolver):
         ... ))
         >>> [[(k, d[k]) for k in sorted(d)] for d in ds]
         [[('day', 1), ('month', 6), ('year', 2015)], [('day', 2), ('month', 6), ('year', 2015)]]
+
+        >>> ds = list(solver.solve_resource(
+        ...     obj,
+        ...     List('date', resources=[Field('day'), Field('month'), Field('year')])
+        ... )) # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+        dataql.solvers.exceptions.NotIterable: ...
+
 
     """
 
@@ -428,9 +477,13 @@ class ListSolver(MultiResourcesBaseSolver):
             Key are the ``entry_name`` attributes of the resources, and the values are the
             solved values.
 
+        Raises
+        ------
+        dataql.solvers.exceptions.NotIterable
+            When the resource from value is not iterable.
+
         """
 
         if not isinstance(value, Iterable):
-            raise Exception('`%s` from source `%s` is not iterable' % (
-                resource.name, self.source.name))
+            raise NotIterable(resource, self.source)
         return [self.solve_subresources(entry, resource.resources) for entry in value]

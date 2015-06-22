@@ -24,7 +24,17 @@ from collections import Mapping
 from inspect import isfunction, ismethod
 
 from dataql.solvers.base import AttributeSolver, ObjectSolver, ListSolver
-from dataql.solvers.exceptions import CannotSolve
+from dataql.solvers.exceptions import (
+    AlreadyRegistered,
+    AttributeNotFound,
+    CallableError,
+    CannotSolve,
+    InvalidSource,
+    NotSolvable,
+    SolveFailure,
+    SolverNotFound,
+    SourceNotFound,
+)
 from dataql.utils import class_repr, isclass
 
 
@@ -52,6 +62,30 @@ class Attribute:
 
         self.name = name
         self.function = function
+
+    def __repr__(self):
+        """String representation of an ``Attribute`` instance.
+
+        Returns
+        -------
+        str
+            The string representation of the current ``Attribute`` instance.
+
+        Example
+        -------
+
+        >>> Attribute('foo')
+        <Attribute 'foo'>
+        >>> Attribute('bar', str)
+        <Attribute(function) 'bar'>
+
+        """
+
+        return "<%s%s '%s'>" % (
+            self.__class__.__name__,
+            '(function)' if self.function else '',
+            self.name
+        )
 
     def solve(self, value, args=None, kwargs=None):
         """Try to get the current attribute/function result for the given value.
@@ -85,11 +119,8 @@ class Attribute:
 
         Raises
         ------
-        TypeError
-            If ``args`` or ``kwargs`` are passed and the result is not callable (only if the
-            attribute is not a function, in the other case, it depends on the arguments passed
-            vs the arguments expected)
-
+        dataql.solvers.exceptions.CallableError
+            If an exception was raised when the attribute/function was called.
 
         Example
         -------
@@ -159,32 +190,33 @@ class Attribute:
         'foo'
 
         # TypeError while calling without argument, but it's a method: raise
-        >>> Attribute('call2').solve(v)
+        >>> Attribute('call2').solve(v) # doctest: +ELLIPSIS
         Traceback (most recent call last):
-        TypeError: call2() missing 1 required positional argument: 'arg'
+        dataql.solvers.exceptions.CallableError:...calling `call2` (without arguments)
 
         # TypeError but no argument needed, but it's a method: raise
-        >>> Attribute('call3').solve(v)
+        >>> Attribute('call3').solve(v) # doctest: +ELLIPSIS
         Traceback (most recent call last):
-        TypeError: error
+        dataql.solvers.exceptions.CallableError:...calling `call3` (without arguments)
 
         # Can be called without used kwargs: we call it
         >>> Attribute('call4').solve(v)
         'foo'
 
         # KeyError while calling without argument, in a get of kwargs, but it's a method: raise
-        >>> Attribute('call5').solve(v)
+        >>> Attribute('call5').solve(v) # doctest: +ELLIPSIS
         Traceback (most recent call last):
-        KeyError: 'foo'
+        dataql.solvers.exceptions.CallableError:...calling `call5` (without arguments)
 
         # Can be called without used args: we call it
         >>> Attribute('call6').solve(v)
         'foo'
 
         # IndexError while calling without argument, in a get of args, but it's a method: raise
-        >>> Attribute('call7').solve(v)
+        >>> Attribute('call7').solve(v) # doctest: +ELLIPSIS
         Traceback (most recent call last):
-        IndexError: tuple index out of range
+        dataql.solvers.exceptions.CallableError:...calling `call7` (without arguments)
+
 
 
         # Can be called without arguments: we call it
@@ -219,15 +251,16 @@ class Attribute:
 
         """
 
-
         # If we have a function, apply this, using the value as first argument,
         # then args and kwargs.
         if self.function:
-            return self.function(value, *(args or []), **(kwargs or {}))
+            try:
+                return self.function(value, *(args or []), **(kwargs or {}))
+            except Exception as e:
+                raise CallableError(self, value, args, kwargs, e)
 
         # Manage a normal attribute.
         result = getattr(value, self.name)
-
 
         # We make a call from the attribute in all cases if we have some arguments.
         if args is not None or kwargs is not None:
@@ -239,39 +272,16 @@ class Attribute:
             try:
                 result = result()
 
-            except Exception:
+            except Exception as e:
                 # If an exception is raised during the call, we have two cases:
                 # - the "thing" called is a function or method, then we re-raise the exception
                 # - it's something else, like an instance of a class having a ``__call__`` method,
                 #   in this case we want to return the instance (if the user want the thing to be
                 #   called it could still use parentheses)
                 if isfunction(result) or ismethod(result):
-                    raise
+                    raise CallableError(self, value, args, kwargs, e)
 
         return result
-
-    def __repr__(self):
-        """String representation of an ``Attribute``.
-
-        Returns
-        -------
-        str
-            The string representation of the current ``Attribute`` instance.
-
-        Example
-        -------
-
-        >>> Attribute('foo')
-        <Attribute 'foo'>
-        >>> Attribute('bar', str)
-        <Attribute(function) 'bar'>
-
-        """
-
-        return "<Attribute%s '%s'>" % (
-            '(function)' if self.function else '',
-            self.name
-        )
 
 
 class Attributes(Mapping):
@@ -293,6 +303,9 @@ class Attributes(Mapping):
 
     allow_all : boolean
         ``True`` if no attributes where passed at create time, ``False`` otherwise.
+    Attribute : class (class attribute)
+        The class to use as for ``Attribute`` objects. Default to
+        ``dataql.solvers.registry.Attribute``.
 
     Example
     -------
@@ -313,6 +326,8 @@ class Attributes(Mapping):
     False
 
     """
+
+    Attribute = Attribute
 
     def __init__(self, *args, allow_all=None):
         """Save attributes, creating ``Attribute`` instances if needed..
@@ -338,11 +353,34 @@ class Attributes(Mapping):
             if not isinstance(arg, Attribute):
                 if isinstance(arg, str):
                     # A attribute from its name
-                    arg = Attribute(arg)
+                    arg = self.Attribute(arg)
                 else:
                     # We have a list of arguments to use to create an ``Attribute`` instance.
-                    arg = Attribute(*arg)
+                    arg = self.Attribute(*arg)
             self.attributes[arg.name] = arg
+
+    def __repr__(self):
+        """String representation of an ``Attributes`` instance.
+
+        Returns
+        -------
+        str
+            The string representation of the current ``Attributes`` instance.
+
+        Example
+        -------
+
+        >>> Attributes('foo')
+        <Attributes>
+        >>> Attributes('bar', allow_all=True)
+        <Attributes(allow all)>
+
+        """
+
+        return "<%s%s>" % (
+            self.__class__.__name__,
+            '(allow all)' if self.allow_all else '',
+        )
 
     def __contains__(self, attribute):
         """Tells if the set contains the given attribute.
@@ -415,7 +453,7 @@ class Attributes(Mapping):
 
         Raises
         ------
-        KeyError
+        dataql.solvers.exceptions.AttributeNotFound
             If the given attribute is not available.
 
         Example
@@ -429,18 +467,18 @@ class Attributes(Mapping):
         <Attribute 'qux'>
         >>> a['_baz']
         Traceback (most recent call last):
-        KeyError: '_baz'
+        dataql.solvers.exceptions.AttributeNotFound: `_baz` is not an allowed attribute
 
         """
 
         # Main check
         if attribute not in self:
-            raise KeyError(attribute)
+            raise AttributeNotFound(attribute)
 
         # Create a ``Attribute`` object if ``allow_all`` is ``True`` and we don't have
         # one yet for the asked attribute.
         if self.allow_all and attribute not in self.attributes:
-            self.attributes[attribute] = Attribute(attribute)
+            self.attributes[attribute] = self.Attribute(attribute)
 
         return self.attributes[attribute]
 
@@ -565,6 +603,9 @@ class Source:
     parent_sources : set
         If ``inherit_attributes`` is ``True``, this set will hold all the sources that are
         parent of the current one.
+    Attributes : class (class attribute)
+        The class to use as for ``Attributes`` (to store the available attributes). Default to
+        ``dataql.solvers.registry.Attributes``.
 
     Example
     -------
@@ -574,9 +615,9 @@ class Source:
     >>> s = Source(date, ['day', 'today', ('str', str)])
     >>> s.solve(d, 'day')
     1
-    >>> s.solve(date, 'today')
+    >>> s.solve(date, 'today') # doctest: +ELLIPSIS
     Traceback (most recent call last):
-    Exception: Source `datetime.date` cannot solve `<class 'datetime.date'>`
+    dataql.solvers.exceptions.NotSolvable: The `datetime.date` source can only...
     >>> s.solve(d, 'str')
     '2015-06-01'
     >>> s = Source(date, ['day', 'today'], allow_class=True)
@@ -584,8 +625,13 @@ class Source:
     1
     >>> s.solve(date, 'today') == date.today()
     True
+    >>> Source(d, ['day', 'today']) # doctest: +ELLIPSIS
+    Traceback (most recent call last):
+    dataql.solvers.exceptions.InvalidSource: 2015-06-01 cannot be used as a source, it must be...
 
     """
+
+    Attributes = Attributes
 
     def __init__(self, source, attributes=None, allow_class=False, allow_subclasses=True,
                  propagate_attributes=True, inherit_attributes=True, parent_sources=None):
@@ -619,12 +665,17 @@ class Source:
             If ``inherit_attributes`` is ``True``, this set will hold all the sources that are
             parent of the current one.
 
+        Raises
+        ------
+        dataql.solvers.exception.InvalidSource
+            When the given source is not a valid class.
+
         """
         if not isinstance(source, type):
-            raise Exception('Source must be a class')
+            raise InvalidSource(source)
         self.source = source
         if not isinstance(attributes, Attributes):
-            attributes = Attributes(*(attributes or []))
+            attributes = self.Attributes(*(attributes or []))
         self.attributes = attributes
         self.allow_class = allow_class
         self.allow_subclasses = allow_subclasses
@@ -633,7 +684,7 @@ class Source:
         self.parent_sources = parent_sources or set()
 
     def __repr__(self):
-        """String representation of a ``Source``.
+        """String representation of a ``Source`` instance.
 
         Returns
         -------
@@ -649,7 +700,10 @@ class Source:
 
         """
 
-        return "<Source '%s'>" % class_repr(self.source)
+        return "<%s '%s'>" % (
+            self.__class__.__name__,
+            class_repr(self.source)
+        )
 
     def solve(self, value, attribute, args=None, kwargs=None):
         """Try to get the given attribute/function result for the given value.
@@ -677,14 +731,10 @@ class Source:
 
         Raises
         ------
-        Exception
+        dataql.solvers.exceptions.NotSolvable
             When the value is not an instance of the source class
-        Exception
+        dataql.solvers.exceptions.AttributeNotFound
             When the attribute is not allowed
-        TypeError
-            If ``args`` or ``kwargs`` are passed and the result is not callable (only if the
-            attribute is not a function, in the other case, it depends on the arguments passed
-            vs the arguments expected)
 
         Example
         -------
@@ -698,12 +748,12 @@ class Source:
         '2015-06-01'
         >>> s.solve(d, 'str')
         '2015-06-01'
-        >>> s.solve('a string', ['day'])
+        >>> s.solve('a string', ['day']) # doctest: +ELLIPSIS
         Traceback (most recent call last):
-        Exception: Source `datetime.date` cannot solve `a string`
-        >>> s.solve(d, 'month')
+        dataql.solvers.exceptions.NotSolvable: The `datetime.date` source can only...
+        >>> s.solve(d, 'month') # doctest: +ELLIPSIS
         Traceback (most recent call last):
-        Exception: `month` is not an allowed attribute for source `datetime.date`
+        dataql.solvers.exceptions.AttributeNotFound: `month` is not an allowed...for `datetime.date`
         >>> s.solve(d, 'day', ['foo'])
         Traceback (most recent call last):
         TypeError: 'int' object is not callable
@@ -712,7 +762,7 @@ class Source:
 
         if not isinstance(value, self.source) and (
                 not self.allow_class or value is not self.source):
-            raise Exception('Source `%s` cannot solve `%s`' % (class_repr(self.source), value))
+            raise NotSolvable(self, value)
 
         attr = None
         if attribute in self.attributes:
@@ -724,8 +774,7 @@ class Source:
                     break
 
             if attr is None:
-                raise Exception('`%s` is not an allowed attribute for source `%s`' % (
-                    attribute, class_repr(self.source)))
+                raise AttributeNotFound(attribute, self)
 
         return attr.solve(value, args, kwargs)
 
@@ -748,6 +797,9 @@ class Registry(Mapping):
         List of solver classes to use for solving a (value, resource) couple. The order is
         important because the first one that returns ``True`` to a call to its ``can_solve``
         method will be used.
+    Source : class (class attribute)
+        The class to use as for ``Source`` (to store each registered source). Default to
+        ``dataql.solvers.registry.Source``.
 
     Example
     -------
@@ -768,10 +820,32 @@ class Registry(Mapping):
 
     solvers = (AttributeSolver, ObjectSolver, ListSolver)
 
+    Source = Source
+
     def __init__(self):
         """Init the sources as an empty dictionary."""
 
         self.sources = {}
+
+    def __repr__(self):
+        """String representation of a ``Registry`` instance.
+
+        Returns
+        -------
+        str
+            The string representation of the current ``Attributes`` instance.
+
+        Example
+        -------
+
+        >>> Registry()
+        <Registry>
+
+        """
+
+        return '<%s>' % (
+            self.__class__.__name__
+        )
 
     def register(self, source, attributes=None, allow_class=False, allow_subclasses=True,
                  propagate_attributes=True, inherit_attributes=True):
@@ -804,8 +878,8 @@ class Registry(Mapping):
 
         Raises
         ------
-        Exception
-            If the source class is already registered
+        dataql.solvers.exception.AlreadyRegistered
+            If the source class is already registered.
 
         Example
         -------
@@ -814,11 +888,14 @@ class Registry(Mapping):
         >>> d = date(2015, 6, 1)
         >>> registry = Registry()
         >>> registry.register(date, ['day', 'today'])
+        >>> registry.register(date, ['day']) # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+        dataql.solvers.exceptions.AlreadyRegistered: The `datetime.date` source is already...
         >>> registry[date].solve(d, 'day')
         1
-        >>> registry[date].solve(date, 'today')
+        >>> registry[date].solve(date, 'today') # doctest: +ELLIPSIS
         Traceback (most recent call last):
-        Exception: Source `datetime.date` cannot solve `<class 'datetime.date'>`
+        dataql.solvers.exceptions.NotSolvable: The `datetime.date` source can only...
         >>> registry = Registry()
         >>> registry.register(date, ['day', 'today'], True)
         >>> s = Source(date, ['day', 'today'], allow_class=True)
@@ -830,7 +907,7 @@ class Registry(Mapping):
         """
 
         if source in self.sources:
-            raise Exception('Source `%s` already in the registry' % source)
+            raise AlreadyRegistered(self, source)
 
         # Inherit attributes from parent classes
         parent_sources = set()
@@ -840,8 +917,10 @@ class Registry(Mapping):
                 if klass in self.sources and self.sources[klass].propagate_attributes:
                     parent_sources.add(self.sources[klass])
 
-        self.sources[source] = Source(source, attributes, allow_class, allow_subclasses,
-                                      propagate_attributes, inherit_attributes, parent_sources)
+        self.sources[source] = self.Source(
+            source, attributes, allow_class, allow_subclasses,
+            propagate_attributes, inherit_attributes, parent_sources
+        )
 
         # Propagate attributes to existing subclasses
         if propagate_attributes:
@@ -867,7 +946,7 @@ class Registry(Mapping):
 
         Raises
         ------
-        KeyError
+        dataql.solvers.exceptions.SourceNotFound
             If the given source is not in the registry.
 
         Example
@@ -884,9 +963,9 @@ class Registry(Mapping):
         <Source 'datetime.date'>
         >>> registry = Registry()
         >>> registry.register(date, ['year', 'month', 'day'],allow_subclasses=False)
-        >>> registry[datetime]
+        >>> registry[datetime] # doctest: +ELLIPSIS
         Traceback (most recent call last):
-        KeyError: <class 'datetime.datetime'>
+        dataql.solvers.exceptions.SourceNotFound: The `datetime.datetime` source is not...
 
         """
 
@@ -910,7 +989,7 @@ class Registry(Mapping):
                     return result
 
         # Not found, return the default error of a ``__getitem__`` method.
-        raise KeyError(source)
+        raise SourceNotFound(self, source)
 
     def __iter__(self):
         """Iterate over the sources in this registry.
@@ -979,7 +1058,7 @@ class Registry(Mapping):
 
         Raises
         ------
-        Exception
+        dataql.solvers.exceptions.SolverNotFound
             When no solver is able to solve the given resource.
 
         Example
@@ -991,16 +1070,16 @@ class Registry(Mapping):
         [<class 'dataql.solvers.base.AttributeSolver'>]
         >>> registry.get_solvers_classes(List(name='foo'))
         [<class 'dataql.solvers.base.ListSolver'>]
-        >>> registry.get_solvers_classes(None)
+        >>> registry.get_solvers_classes(None) # doctest: +ELLIPSIS
         Traceback (most recent call last):
-        Exception: No solver found for `builtins.NoneType`
+        dataql.solvers.exceptions.SolverNotFound: No solvers found for this kind of resource:...
 
         """
 
         solvers = [s for s in self.solvers if s.can_solve(resource)]
         if solvers:
             return solvers
-        raise Exception('No solver found for `%s`' % class_repr(resource))
+        raise SolverNotFound(self, resource)
 
     def solve(self, value, resource):
         """Solve the given resource for the given value.
@@ -1023,7 +1102,7 @@ class Registry(Mapping):
 
         Raises
         ------
-        Exception
+        dataql.solvers.exceptions.SolveFailure
             If no solvers were able to solve the resource. This happen if a solver says that
             it can solve a resource (by returning ``True`` when calling its ``can_solve`` method,
             but raises a ``CannotSolve`` exception during solving.
@@ -1057,6 +1136,12 @@ class Registry(Mapping):
         >>> [[(k, d[k]) for k in sorted(d)] for d in ds]
         [[('day', 1), ('month', 6), ('year', 2015)], [('day', 2), ('month', 6), ('year', 2015)]]
 
+        # Example of ``SolveFailure`` exception.
+        >>> from dataql.solvers.exceptions import CannotSolve
+        >>> raise SolveFailure(registry, Field('fromtimestamp'), date)
+        Traceback (most recent call last):
+        dataql.solvers.exceptions.SolveFailure: Unable to solve resource `<Field[fromtimestamp]>`.
+
         """
 
         solvers_classes = self.get_solvers_classes(resource)
@@ -1066,5 +1151,4 @@ class Registry(Mapping):
                 return solver.solve_resource(value, resource)
             except CannotSolve:
                 continue
-        raise Exception('Solver(s) for `%s` found but no one able to solve it' %
-                        class_repr(resource))
+        raise SolveFailure(self, resource, value)

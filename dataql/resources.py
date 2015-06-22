@@ -155,12 +155,12 @@ class Resource(WithArgsMixin):
             filter_.set_parent(self)
 
     def __repr__(self):
-        """Returns a visual representation of a resource.
+        """String representation of a ``Resource`` instance.
 
         Returns
         -------
         str
-            The string representation of the resource.
+            The string representation of the current ``Resource`` instance.
 
         Example
         -------
@@ -259,12 +259,12 @@ class MultiResources(Resource):
             resource.set_parent(self)
 
     def __repr__(self):
-        """Returns a visual representation of a multi-resource.
+        """String representation of a ``MultiResources`` instance.
 
         Returns
         -------
         str
-            The string representation of the resource.
+            The string representation of the current ``MultiResources`` instance.
 
         Notes
         -----
@@ -360,12 +360,12 @@ class Filter(WithArgsMixin):
         self.parent = None
 
     def __repr__(self):
-        """Returns a visual representation of a filter.
+        """String representation of a ``Filter`` instance.
 
         Returns
         -------
         str
-            The string representation of the filter.
+            The string representation of the current ``Filter`` instance.
 
         Example
         -------
@@ -433,12 +433,12 @@ class Arg:
         self.parent = None
 
     def __repr__(self):
-        """Returns a visual representation of a filter.
+        """String representation of an ``Arg`` instance.
 
         Returns
         -------
         str
-            The string representation of the filter.
+            The string representation of the current ``Arg`` instance.
 
         Example
         -------
