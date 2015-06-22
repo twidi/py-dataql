@@ -152,6 +152,8 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         <Field[bar] />
         >>> DataQLParser(r'foo:bar', default_rule='NAMED_RESOURCE').data
         <Field[foo] bar />
+        >>> DataQLParser(r'foo : bar', default_rule='NAMED_RESOURCE').data
+        <Field[foo] bar />
 
         """
 
@@ -265,7 +267,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
 
         return [children[0]] + (children[1] or [])
 
-    @rule('IDENT COL')
+    @rule('IDENT WS COL WS')
     def visit_RESOURCE_NAME(self, node, children):
         """The name of a resource, to force a name of a resource.
 
@@ -290,11 +292,12 @@ class DataQLParser(FiltersParserMixin, BaseParser):
 
         >>> DataQLParser(r'foo:', default_rule='RESOURCE_NAME').data
         'foo'
+        >>> DataQLParser(r'foo :', default_rule='RESOURCE_NAME').data
+        'foo'
 
         """
 
-        name, _ = children
-        return name
+        return children[0]
 
     @rule('RESOURCE_NAME?')
     def visit_OPTIONAL_RESOURCE_NAME(self, node, children):
