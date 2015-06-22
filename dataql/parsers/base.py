@@ -5,18 +5,36 @@ to manage the creation of the grammar using the ones from all parent classes.
 
 """
 
+# pylint: disable=no-self-use
+
+from abc import ABCMeta
 from inspect import isfunction
 import re
 import sys
 
-from parsimonious import Grammar, NodeVisitor, rule
+from parsimonious import Grammar, NodeVisitor
 from parsimonious.exceptions import VisitationError, UndefinedLabel
 from parsimonious.nodes import RuleDecoratorMeta as BaseRuleDecoratorMeta
 
-from dataql.resources import *
+from dataql import resources
 
 
-class RuleDecoratorMeta(BaseRuleDecoratorMeta):
+def rule(rule_string):
+    """Decorate a NodeVisitor ``visit_*`` method to tie a grammar rule to it.
+
+    It's a simple rewrite from the ``rule`` decorator from ``parsimonious``, to stop using
+    a private attribute that raises pylint warnings.
+
+    """
+
+    def decorator(method):
+        """Add the rule as an attribute to the method."""
+        method.rule = rule_string
+        return method
+    return decorator
+
+
+class RuleDecoratorMeta(BaseRuleDecoratorMeta, ABCMeta):
     """Metaclass to use the @rule decorator.
 
     This metaclass allows to convert @rule decorators into real rules, but also to inherit
@@ -45,8 +63,8 @@ class RuleDecoratorMeta(BaseRuleDecoratorMeta):
 
         def get_rule_name_from_method(method_name):
             """Remove any leading "visit_" from a method method_name and get uppercase name"""
-            name = method_name[6:] if method_name.startswith('visit_') else method_name
-            return name.upper()
+            result = method_name[6:] if method_name.startswith('visit_') else method_name
+            return result.upper()
 
         # Grammar starts by the full grammar from parents (each parent can redefine a part).
         grammar_parts = [getattr(b, 'grammar_str', '') for b in reversed(bases)]
@@ -55,14 +73,14 @@ class RuleDecoratorMeta(BaseRuleDecoratorMeta):
 
         # Get all methods to use as rules (the ones decorated by ``@rule``).
         methods = [v for k, v in namespace.items() if
-                   hasattr(v, '_rule') and isfunction(v)]
+                   hasattr(v, 'rule') and isfunction(v)]
 
         if methods:
             # Keep them in the order defined in the code source.
             methods.sort(key=lambda x: x.__code__.co_firstlineno)
 
             for method in methods:
-                method_rule = method._rule
+                method_rule = method.rule
                 # Manage aliases: parsimonious cannot manage rules like "KEY = OTHERKEY"
                 # So we add a no-op.
                 match = mcs.ident_simple_parser.match(method_rule)
@@ -102,8 +120,7 @@ class RuleDecoratorMeta(BaseRuleDecoratorMeta):
 
         # We don't want to exec the __new__ method of our super class, ie BaseRuleDecoratorMeta
         # because we just rewrite everything it does.
-        return super(BaseRuleDecoratorMeta,
-                     mcs).__new__(mcs, name, bases, namespace)
+        return super().__new__(mcs, name, bases, namespace)
 
 
 class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
@@ -202,12 +219,12 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
 
     """
 
-    Field = Field
-    List = List
-    Object = Object
-    Filter = Filter
-    NamedArg = NamedArg
-    PosArg = PosArg
+    Field = resources.Field
+    List = resources.List
+    Object = resources.Object
+    Filter = resources.Filter
+    NamedArg = resources.NamedArg
+    PosArg = resources.PosArg
 
     def __init__(self, text, default_rule=None):
         """Init the parser with some text to parse, and parse it.
@@ -260,8 +277,12 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         except Exception:
             # Catch any exception, and tack on a parse tree so it's easier to
             # see where it went wrong.
-            exc_class, exc, tb = sys.exc_info()
-            raise VisitationError(exc, exc_class, node).with_traceback(tb)
+            exc_class, exc, trace = sys.exc_info()
+            raise VisitationError(exc, exc_class, node).with_traceback(trace)
+
+    def generic_visit(self, node, children):
+        """Methods not called, only to define abstract method from parent."""
+        pass
 
     @rule('~"[_A-Z][_A-Z0-9]*"i')
     def visit_ident(self, node, _):

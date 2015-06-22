@@ -9,10 +9,12 @@ It provides some mixin to ease the creation of complex parsers:
 
 """
 
+from abc import ABCMeta
+
 from dataql.parsers.base import BaseParser, rule
 
 
-class NamedArgsParserMixin(BaseParser):
+class NamedArgsParserMixin(BaseParser, metaclass=ABCMeta):
     """Parser mixin that provides rules to manage named arguments.
 
     A list of named arguments is a list of at least one named argument separated by a comma.
@@ -182,7 +184,7 @@ class NamedArgsParserMixin(BaseParser):
         )
 
 
-class UnnamedArgsParserMixin(BaseParser):
+class UnnamedArgsParserMixin(BaseParser, metaclass=ABCMeta):
     """Parser mixin that provides rules to manage unnamed arguments.
 
     A list of unnamed arguments is a list of at least one unnamed argument separated by a comma.
@@ -344,7 +346,8 @@ class UnnamedArgsParserMixin(BaseParser):
         )
 
 
-class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
+class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser,
+                      metaclass=ABCMeta):
     """Parser mixin that provides rules to manage arguments in parentheses.
 
     To use it, add this mixin to the class bases, and use``OPTIONAL_ARGS`` in your rule(s).
@@ -509,7 +512,7 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
         return children[0] + children[2]
 
 
-class FiltersParserMixin(ArgsParserMixin, BaseParser):
+class FiltersParserMixin(ArgsParserMixin, BaseParser, metaclass=ABCMeta):
     """Parser mixin that provides rules to manage arguments in parentheses.
 
     To use it, add this mixin to the class bases, and use``OPTIONAL_ARGS`` in your rule(s).

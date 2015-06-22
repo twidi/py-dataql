@@ -4,9 +4,11 @@ It holds all the exception that may be raised by this module.
 
 """
 
-from dataql.utils import class_repr
+from abc import ABCMeta
 
 from dataql.exceptions import DataQLException
+from dataql.utils import class_repr
+
 
 __all__ = (
     'AlreadyRegistered',
@@ -22,12 +24,12 @@ __all__ = (
 )
 
 
-class SolversException(DataQLException):
+class SolversException(DataQLException, metaclass=ABCMeta):
     """Base for exceptions raised in the ``dataql.solvers`` module."""
     pass
 
 
-class SolverObjectException(SolversException):
+class SolverObjectException(SolversException, metaclass=ABCMeta):
     """Base for exceptions raised by a ``Solver`` object."""
     pass
 
@@ -52,6 +54,7 @@ class CannotSolve(SolverObjectException):
         self.solver = solver
         self.resource = resource
         self.value = value
+        super().__init__(str(self))
 
     def __str__(self):
         return 'Solver `%s` was not able to solve resource `%s`.' % (
@@ -60,17 +63,17 @@ class CannotSolve(SolverObjectException):
         )
 
 
-class AttributeSolverException(SolverObjectException):
+class AttributeSolverException(SolverObjectException, metaclass=ABCMeta):
     """Base for exceptions raised by a ``AttributeSolver`` object."""
     pass
 
 
-class ObjectSolverException(SolverObjectException):
+class ObjectSolverException(SolverObjectException, metaclass=ABCMeta):
     """Base for exceptions raised by a ``ObjectSolver`` object."""
     pass
 
 
-class ListSolverException(SolverObjectException):
+class ListSolverException(SolverObjectException, metaclass=ABCMeta):
     """Base for exceptions raised by a ``ListSolver`` object."""
     pass
 
@@ -93,6 +96,7 @@ class NotIterable(ListSolverException):
     def __init__(self, resource, source):
         self.resource = resource
         self.source = source
+        super().__init__(str(self))
 
     def __str__(self):
         return '`%s` from source `%s` is not iterable' % (
@@ -101,7 +105,7 @@ class NotIterable(ListSolverException):
         )
 
 
-class AttributeException(SolversException):
+class AttributeException(SolversException, metaclass=ABCMeta):
     """Base for exceptions raised by an ``Attribute`` or ``Attributes`` object."""
     pass
 
@@ -124,6 +128,7 @@ class AttributeNotFound(AttributeException, KeyError):
     def __init__(self, name, source=None):
         self.name = name
         self.source = source
+        super().__init__(str(self))
 
     def __str__(self):
         if self.source:
@@ -164,6 +169,7 @@ class CallableError(AttributeException):
         self.call_args = args
         self.call_kwargs = kwargs
         self.original_exception = original_exception
+        super().__init__(str(self))
 
     def __str__(self):
         return 'An error occurred while calling `%s` (%s arguments)' % (
@@ -172,7 +178,7 @@ class CallableError(AttributeException):
         )
 
 
-class SourceException(SolversException):
+class SourceException(SolversException, metaclass=ABCMeta):
     """Base for exceptions raised by a ``Source`` object."""
     pass
 
@@ -191,6 +197,7 @@ class InvalidSource(SourceException):
 
     def __init__(self, source):
         self.source = source
+        super().__init__(str(self))
 
     def __str__(self):
         return '%s cannot be used as a source, it must be a class' % (
@@ -216,6 +223,7 @@ class NotSolvable(SourceException):
     def __init__(self, source, value):
         self.source = source
         self.value = value
+        super().__init__(str(self))
 
     def __str__(self):
         if self.source.allow_class:
@@ -228,7 +236,7 @@ class NotSolvable(SourceException):
             )
 
 
-class RegistryException(SolversException):
+class RegistryException(SolversException, metaclass=ABCMeta):
     """Base for exceptions raised by a ``Registry`` object."""
     pass
 
@@ -250,6 +258,7 @@ class AlreadyRegistered(RegistryException):
     def __init__(self, registry, source):
         self.registry = registry
         self.source = source
+        super().__init__(str(self))
 
     def __str__(self):
         return 'The `%s` source is already in the registry.' % (
@@ -274,6 +283,7 @@ class SourceNotFound(RegistryException, KeyError):
     def __init__(self, registry, source):
         self.registry = registry
         self.source = source
+        super().__init__(str(self))
 
     def __str__(self):
         return 'The `%s` source is not in the registry.' % (
@@ -296,6 +306,7 @@ class SolverNotFound(RegistryException):
     def __init__(self, registry, resource):
         self.registry = registry
         self.resource = resource
+        super().__init__(str(self))
 
     def __str__(self):
         return 'No solvers found for this kind of resource: `%s`' % (
@@ -323,6 +334,7 @@ class SolveFailure(RegistryException):
         self.registry = registry
         self.resource = resource
         self.value = value
+        super().__init__(str(self))
 
     def __str__(self):
         return 'Unable to solve resource `%s`.' % (
