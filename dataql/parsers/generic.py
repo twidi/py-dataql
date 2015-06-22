@@ -39,7 +39,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
     default_rule = 'ROOT'
 
     @rule('WS NAMED_RESOURCE WS')
-    def visit_ROOT(self, node, children):
+    def visit_root(self, node, children):
         """The main node holding all the query.
 
         Arguments
@@ -91,7 +91,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return resource
 
     @rule('LIST / OBJECT / FIELD')
-    def visit_RESOURCE(self, node, children):
+    def visit_resource(self, node, children):
         """A resource in the query, could be a list, an object or a simple field.
 
         Arguments
@@ -128,7 +128,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return children[0]
 
     @rule('OPTIONAL_RESOURCE_NAME RESOURCE')
-    def visit_NAMED_RESOURCE(self, node, children):
+    def visit_named_resource(self, node, children):
         """A resource in the query with its optional name.
 
         Arguments
@@ -163,7 +163,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return resource
 
     @rule('COM NAMED_RESOURCE')
-    def visit_NEXT_RESOURCE(self, node, children):
+    def visit_next_resource(self, node, children):
         """A resource in the query preceded by a coma, to define a resource following an other one.
 
         Arguments
@@ -193,7 +193,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return children[1]
 
     @rule('NEXT_RESOURCE*')
-    def visit_NEXT_RESOURCES(self, node, children):
+    def visit_next_resources(self, node, children):
         """A list of resource in the query following the first resource.
 
         Arguments
@@ -229,7 +229,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return children
 
     @rule('RESOURCE NEXT_RESOURCES COM?')
-    def visit_CONTENT(self, node, children):
+    def visit_content(self, node, children):
         """The content of a resource, composed of a list of resources.
 
         Arguments
@@ -268,7 +268,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return [children[0]] + (children[1] or [])
 
     @rule('IDENT WS COL WS')
-    def visit_RESOURCE_NAME(self, node, children):
+    def visit_resource_name(self, node, children):
         """The name of a resource, to force a name of a resource.
 
         Without it, the resource entry name will be used.
@@ -300,7 +300,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return children[0]
 
     @rule('RESOURCE_NAME?')
-    def visit_OPTIONAL_RESOURCE_NAME(self, node, children):
+    def visit_optional_resource_name(self, node, children):
         """The optional name of a resource, to force a name of a resource if set.
 
         Without it, the resource entry name will be used.
@@ -330,7 +330,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return children[0] if children and children[0] else None
 
     @rule('FILTERS')
-    def visit_FIELD(self, node, children):
+    def visit_field(self, node, children):
         """A simple field.
 
         Arguments
@@ -410,7 +410,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return self.filters_to_resource(children[0], klass)
 
     @rule('FILTERS CUR_O CONTENT CUR_C')
-    def visit_OBJECT(self, node, children):
+    def visit_object(self, node, children):
         """Manage an object, represented by a ``.resources.Object`` instance.
 
         The first filter is removed to fill the name and args of the resource. See
@@ -440,7 +440,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return self.filters_to_resource(children[0], self.Object, resources=children[2])
 
     @rule('FILTERS BRA_O CONTENT BRA_C')
-    def visit_LIST(self, node, children):
+    def visit_list(self, node, children):
         """Manage a list, represented by a ``.resources.List`` instance.
 
         The first filter is removed to fill the name and args of the resource. See

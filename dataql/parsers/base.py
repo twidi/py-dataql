@@ -7,8 +7,10 @@ to manage the creation of the grammar using the ones from all parent classes.
 
 from inspect import isfunction
 import re
+import sys
 
 from parsimonious import Grammar, NodeVisitor, rule
+from parsimonious.exceptions import VisitationError, UndefinedLabel
 from parsimonious.nodes import RuleDecoratorMeta as BaseRuleDecoratorMeta
 
 from dataql.resources import *
@@ -42,8 +44,9 @@ class RuleDecoratorMeta(BaseRuleDecoratorMeta):
     def __new__(mcs, name, bases, namespace):
 
         def get_rule_name_from_method(method_name):
-            """Remove any leading "visit_" from a method method_name."""
-            return method_name[6:] if method_name.startswith('visit_') else method_name
+            """Remove any leading "visit_" from a method method_name and get uppercase name"""
+            name = method_name[6:] if method_name.startswith('visit_') else method_name
+            return name.upper()
 
         # Grammar starts by the full grammar from parents (each parent can redefine a part).
         grammar_parts = [getattr(b, 'grammar_str', '') for b in reversed(bases)]
@@ -234,12 +237,34 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         # Parse the text and save the resource in the ``data`` attribute.
         self.data = self.parse(text)
 
-    def generic_visit(self, node, children):
-        """Methods called for all rules with specific methods. Does nothing."""
-        pass
+    def visit(self, node):
+        """Rewrite original method to use lower-case method, and not "generic" function."""
+
+        try:
+            # Get the "visit_%s" method, using the lower case version of the rule.
+            method = getattr(self, 'visit_%s' % node.expr_name.lower())
+        except AttributeError:
+            # If the method is not defined, we do nothing for this node.
+            return
+
+        # Below is untouched code from the original ``visit`` method.
+
+        # Call that method, and show where in the tree it failed if it blows up.
+        try:
+            return method(node, [self.visit(n) for n in node])
+        except (VisitationError, UndefinedLabel):
+            # Don't catch and re-wrap already-wrapped exceptions.
+            raise
+        except self.unwrapped_exceptions:
+            raise
+        except Exception:
+            # Catch any exception, and tack on a parse tree so it's easier to
+            # see where it went wrong.
+            exc_class, exc, tb = sys.exc_info()
+            raise VisitationError(exc, exc_class, node).with_traceback(tb)
 
     @rule('~"[_A-Z][_A-Z0-9]*"i')
-    def visit_IDENT(self, node, children):
+    def visit_ident(self, node, children):
         """Return a valid python identifier.
 
         It may be used for a resource name, a filter...
@@ -280,7 +305,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return node.text
 
     @rule('COL_OR_EQ')
-    def visit_OPER(self, node, children):
+    def visit_oper(self, node, children):
         """Return an operator as a string. Currently only "=" and ":" (both synonyms)
 
         Arguments
@@ -309,7 +334,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return oper
 
     @rule('STR / NB / NULL / FALSE / TRUE')
-    def visit_VALUE(self, node, children):
+    def visit_value(self, node, children):
         """Return a value, which is a string, a number, a null/false/true like value.
 
         Arguments
@@ -343,7 +368,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return children[0]
 
     @rule(r'~"([\'\"])(?:[^\\1\\\\]|\\\\.)*?\\1"')
-    def visit_STR(self, node, children):
+    def visit_str(self, node, children):
         """Regex rule for quoted string allowing escaped quotes inside.
 
         Arguments
@@ -381,12 +406,12 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         """
 
         # remove surrounding quotes and remove single backslashes
-        return self.visit_STR.re_single_backslash.sub('', node.text[1:-1])
+        return self.visit_str.re_single_backslash.sub('', node.text[1:-1])
     # regex  to unquote single quote characters
-    visit_STR.re_single_backslash = re.compile(r'(?<!\\)\\')
+    visit_str.re_single_backslash = re.compile(r'(?<!\\)\\')
 
     @rule('~"[-+]?\d*\.?\d+([eE][-+]?\d+)?"')
-    def visit_NB(self, node, children):
+    def visit_nb(self, node, children):
         """Return a int of float from the given number.
 
         Also work with scientific notation like 1e+50.
@@ -425,7 +450,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return self.convert_nb(node.text)
 
     @rule('~"(?:null|nil|none)"i')
-    def visit_NULL(self, node, children):
+    def visit_null(self, node, children):
         """Return ``None`` for the string "null", "none", or "nil" (case insensitive)
 
         Arguments
@@ -464,7 +489,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return None
 
     @rule('~"(?:false)"i')
-    def visit_FALSE(self, node, children):
+    def visit_false(self, node, children):
         """Return ``False`` for the string "false" (case insensitive)
 
         Arguments
@@ -491,7 +516,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return False
 
     @rule('~"(?:true)"i')
-    def visit_TRUE(self, node, children):
+    def visit_true(self, node, children):
         """Return ``True`` for the string "true" (case insensitive)
 
         Arguments

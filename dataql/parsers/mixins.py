@@ -34,7 +34,7 @@ class NamedArgsParserMixin(BaseParser):
     >>> class TestParser(NamedArgsParserMixin, BaseParser):
     ...     default_rule = 'ROOT'
     ...     @rule('PAR_O NAMED_ARGS PAR_C')
-    ...     def visit_ROOT(self, node, children):
+    ...     def visit_root(self, node, children):
     ...         return 'Content with named args: %s' % children[1]
     ...
     >>> TestParser('(foo=TRUE, bar ="BAZ",quz=null)').data
@@ -45,7 +45,7 @@ class NamedArgsParserMixin(BaseParser):
     default_rule = 'NAMED_ARGS'
 
     @rule('NAMED_ARG NEXT_NAMED_ARGS')
-    def visit_NAMED_ARGS(self, node, children):
+    def visit_named_args(self, node, children):
         """Named arguments of a filter.
 
         Arguments
@@ -75,7 +75,7 @@ class NamedArgsParserMixin(BaseParser):
         return [children[0]] + (children[1] or [])
 
     @rule('COM NAMED_ARG')
-    def visit_NEXT_NAMED_ARG(self, node, children):
+    def visit_next_named_arg(self, node, children):
         """Named argument of a filter following a previous one (so, preceded by a comma).
 
         Arguments
@@ -109,7 +109,7 @@ class NamedArgsParserMixin(BaseParser):
         return children[1]
 
     @rule('NEXT_NAMED_ARG*')
-    def visit_NEXT_NAMED_ARGS(self, node, children):
+    def visit_next_named_args(self, node, children):
         """Named arguments of a filter following the first one.
 
         Arguments
@@ -141,7 +141,7 @@ class NamedArgsParserMixin(BaseParser):
         return children
 
     @rule('IDENT WS OPER WS VALUE')
-    def visit_NAMED_ARG(self, node, children):
+    def visit_named_arg(self, node, children):
         """Named argument of a filter.
 
         Arguments
@@ -203,7 +203,7 @@ class UnnamedArgsParserMixin(BaseParser):
     >>> class TestParser(UnnamedArgsParserMixin, BaseParser):
     ...     default_rule = 'ROOT'
     ...     @rule('PAR_O UNNAMED_ARGS PAR_C')
-    ...     def visit_ROOT(self, node, children):
+    ...     def visit_root(self, node, children):
     ...         return 'Content with unnamed args: %s' % children[1]
     ...
     >>> TestParser('(1,null, "foo")').data
@@ -214,7 +214,7 @@ class UnnamedArgsParserMixin(BaseParser):
     default_rule = 'UNNAMED_ARGS'
 
     @rule('UNNAMED_ARG NEXT_UNNAMED_ARGS')
-    def visit_UNNAMED_ARGS(self, node, children):
+    def visit_unnamed_args(self, node, children):
         """Unnamed arguments of a filter.
 
         Arguments
@@ -244,7 +244,7 @@ class UnnamedArgsParserMixin(BaseParser):
         return [children[0]] + (children[1] or [])
 
     @rule('COM UNNAMED_ARG')
-    def visit_NEXT_UNNAMED_ARG(self, node, children):
+    def visit_next_unnamed_arg(self, node, children):
         """Unnamed argument of a filter following a previous one (so, preceded by a comma).
 
         Arguments
@@ -278,7 +278,7 @@ class UnnamedArgsParserMixin(BaseParser):
         return children[1]
 
     @rule('NEXT_UNNAMED_ARG*')
-    def visit_NEXT_UNNAMED_ARGS(self, node, children):
+    def visit_next_unnamed_args(self, node, children):
         """Unnamed arguments of a filter following the first one.
 
         Arguments
@@ -309,7 +309,7 @@ class UnnamedArgsParserMixin(BaseParser):
         return children
 
     @rule('VALUE')
-    def visit_UNNAMED_ARG(self, node, children):
+    def visit_unnamed_arg(self, node, children):
         """Unnamed argument of a filter.
 
         Arguments
@@ -364,7 +364,7 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
     >>> class TestParser(ArgsParserMixin, BaseParser):
     ...     default_rule = 'ROOT'
     ...     @rule('IDENT OPTIONAL_ARGS')
-    ...     def visit_ROOT(self, node, children):
+    ...     def visit_root(self, node, children):
     ...         return 'Ident "%s" with args: %s' % tuple(children)
     ...
     >>> TestParser('something(1,null, "foo")').data
@@ -375,7 +375,7 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
     default_rule = 'OPTIONAL_ARGS'
 
     @rule('PAR_O OPTIONAL_ARGS_CONTENT PAR_C')
-    def visit_OPTIONAL_ARGS(self, node, children):
+    def visit_optional_args(self, node, children):
         """The optional arguments of a filter.
 
         Arguments
@@ -408,7 +408,7 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
         return children[1]
 
     @rule('ARGS?')
-    def visit_OPTIONAL_ARGS_CONTENT(self, node, children):
+    def visit_optional_args_content(self, node, children):
         """The optional arguments of a filter (part inside the parentheses).
 
         Arguments
@@ -439,7 +439,7 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
         return children[0] if children else []
 
     @rule('UNNAMED_ARGS_AND_NAMED_ARGS / UNNAMED_ARGS / NAMED_ARGS')
-    def visit_ARGS(self, node, children):
+    def visit_args(self, node, children):
         """Arguments of a filter (part inside the parentheses).
 
         The arguments of a filter can be named or not. But unnamed ones must always come first.
@@ -481,7 +481,7 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
         return children[0]
 
     @rule('UNNAMED_ARGS COM NAMED_ARGS')
-    def visit_UNNAMED_ARGS_AND_NAMED_ARGS(self, node, children):
+    def visit_unnamed_args_and_named_args(self, node, children):
         """Unnamed arguments of a filter.
 
         Arguments
@@ -531,7 +531,7 @@ class FiltersParserMixin(ArgsParserMixin, BaseParser):
     >>> class TestParser(FiltersParserMixin, BaseParser):
     ...     default_rule = 'ROOT'
     ...     @rule('IDENT DOT FILTERS')
-    ...     def visit_ROOT(self, node, children):
+    ...     def visit_root(self, node, children):
     ...         return 'Ident "%s" filtered with %s' % (children[0], children[2])
     ...
     >>> TestParser('qux.foo().bar.baz(True, x=1)').data
@@ -542,7 +542,7 @@ class FiltersParserMixin(ArgsParserMixin, BaseParser):
     default_rule = 'FILTERS'
 
     @rule('FILTER NEXT_FILTERS')
-    def visit_FILTERS(self, node, children):
+    def visit_filters(self, node, children):
         """A succession of filters.
 
         Arguments
@@ -572,7 +572,7 @@ class FiltersParserMixin(ArgsParserMixin, BaseParser):
         return [children[0]] + (children[1] or [])
 
     @rule('IDENT FILTER_ARGS')
-    def visit_FILTER(self, node, children):
+    def visit_filter(self, node, children):
         """A filter, with optional arguments.
 
         Arguments
@@ -608,7 +608,7 @@ class FiltersParserMixin(ArgsParserMixin, BaseParser):
         )
 
     @rule('OPTIONAL_ARGS?')
-    def visit_FILTER_ARGS(self, node, children):
+    def visit_filter_args(self, node, children):
         """The optional arguments of a filter.
 
         Arguments
@@ -640,7 +640,7 @@ class FiltersParserMixin(ArgsParserMixin, BaseParser):
         return children[0] if children else None
 
     @rule('NEXT_FILTER*')
-    def visit_NEXT_FILTERS(self, node, children):
+    def visit_next_filters(self, node, children):
         """Optional filters following a first one.
 
         Arguments
@@ -669,7 +669,7 @@ class FiltersParserMixin(ArgsParserMixin, BaseParser):
         return children
 
     @rule('DOT FILTER')
-    def visit_NEXT_FILTER(self, node, children):
+    def visit_next_filter(self, node, children):
         """A filter that follow another one (so it starts with a dot).
 
         Arguments
