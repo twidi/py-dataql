@@ -35,8 +35,10 @@ To use subclasses of the classes defined here, they must be set on the parser:
 
 __all__ = ('Field', 'List', 'Object', 'Filter', 'NamedArg', 'PosArg')
 
+from abc import ABCMeta
 
-class WithArgsMixin:
+
+class WithArgsMixin(metaclass=ABCMeta):
     """Mixin to manage entities accepting arguments.
 
     Attributes
@@ -84,7 +86,7 @@ class WithArgsMixin:
         return args, kwargs
 
 
-class Resource(WithArgsMixin):
+class Resource(WithArgsMixin, metaclass=ABCMeta):
     """Base class for all resource classes.
 
     A resource is mainly a attribute to retrieve from a value (via a solver).
@@ -214,7 +216,7 @@ class Field(Resource):
     pass
 
 
-class MultiResources(Resource):
+class MultiResources(Resource, metaclass=ABCMeta):
     """Base class for multi resources: get many attributes for one resource.
 
     It simply add a ``resources`` attributes to the base ``Resource`` class.
@@ -292,9 +294,11 @@ class MultiResources(Resource):
         parent_repr = super().__repr__()
 
         if self.resources:
-            return ('%(start)s\n'
-                    '%(sub)s\n'
-                    '%(indent)s</%(cls)s[%(entry_name)s]>') % {
+            return (
+                '%(start)s\n'
+                '%(sub)s\n'
+                '%(indent)s</%(cls)s[%(entry_name)s]>'
+            ) % {
                 'start': parent_repr[:-3] + '>',
                 'sub': '\n'.join(map(str, self.resources)),
                 'cls': self.__class__.__name__,

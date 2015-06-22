@@ -20,8 +20,9 @@ Example
 
 """
 
+from abc import ABCMeta
 from collections import Mapping
-from inspect import isfunction, ismethod
+from inspect import isclass, isfunction, ismethod
 
 from dataql.solvers.base import AttributeSolver, ObjectSolver, ListSolver
 from dataql.solvers.exceptions import (
@@ -35,7 +36,7 @@ from dataql.solvers.exceptions import (
     SolverNotFound,
     SourceNotFound,
 )
-from dataql.utils import class_repr, isclass
+from dataql.utils import class_repr
 
 
 class Attribute:
@@ -256,8 +257,8 @@ class Attribute:
         if self.function:
             try:
                 return self.function(value, *(args or []), **(kwargs or {}))
-            except Exception as e:
-                raise CallableError(self, value, args, kwargs, e)
+            except Exception as ex:
+                raise CallableError(self, value, args, kwargs, ex)
 
         # Manage a normal attribute.
         result = getattr(value, self.name)
@@ -272,14 +273,14 @@ class Attribute:
             try:
                 result = result()
 
-            except Exception as e:
+            except Exception as ex:
                 # If an exception is raised during the call, we have two cases:
                 # - the "thing" called is a function or method, then we re-raise the exception
                 # - it's something else, like an instance of a class having a ``__call__`` method,
                 #   in this case we want to return the instance (if the user want the thing to be
                 #   called it could still use parentheses)
                 if isfunction(result) or ismethod(result):
-                    raise CallableError(self, value, args, kwargs, e)
+                    raise CallableError(self, value, args, kwargs, ex)
 
         return result
 
@@ -539,7 +540,7 @@ class Attributes(Mapping):
         return len(self.attributes)
 
 
-class BaseEntryPoints:
+class BaseEntryPoints(metaclass=ABCMeta):
     """Base class for class created via ``EntryPoints``. May contains utilities in the future."""
     pass
 
@@ -924,9 +925,10 @@ class Registry(Mapping):
 
         # Propagate attributes to existing subclasses
         if propagate_attributes:
-            for s in self.sources.values():
-                if s.source != source and s.inherit_attributes and issubclass(s.source, source):
-                    s.parent_source.add(self.sources[source])
+            for src in self.sources.values():
+                if src.source != source and src.inherit_attributes\
+                        and issubclass(src.source, source):
+                    src.parent_source.add(self.sources[source])
 
     def __getitem__(self, source):
         """Get the ``Source`` instance for the given source class.

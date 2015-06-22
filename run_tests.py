@@ -72,7 +72,7 @@ def discover(start_directory, top_directory=None):
     for module in walk_modules(top_directory):
         try:
             tests = doctest.DocTestSuite(module)
-        except ValueError as e:
+        except ValueError:
             pass
         else:
             suite.addTest(tests)

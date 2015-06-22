@@ -39,12 +39,12 @@ class DataQLParser(FiltersParserMixin, BaseParser):
     default_rule = 'ROOT'
 
     @rule('WS NAMED_RESOURCE WS')
-    def visit_ROOT(self, node, children):
+    def visit_root(self, _, children):
         """The main node holding all the query.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``WS`` (whitespace): ``None``.
             - 1: for ``NAMED_RESOURCE``: an instance of a subclass of ``.resources.Resource``.
@@ -91,12 +91,12 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return resource
 
     @rule('LIST / OBJECT / FIELD')
-    def visit_RESOURCE(self, node, children):
+    def visit_resource(self, _, children):
         """A resource in the query, could be a list, an object or a simple field.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: an instance of a subclass of ``.resources.Resource``, depending of the type that
               matches the rule.
@@ -128,12 +128,12 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return children[0]
 
     @rule('OPTIONAL_RESOURCE_NAME RESOURCE')
-    def visit_NAMED_RESOURCE(self, node, children):
+    def visit_named_resource(self, _, children):
         """A resource in the query with its optional name.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``OPTIONAL_RESOURCE_NAME``: str, the name of the resource, or ``None`` if not
                  set in the query.
@@ -163,12 +163,12 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return resource
 
     @rule('COM NAMED_RESOURCE')
-    def visit_NEXT_RESOURCE(self, node, children):
+    def visit_next_resource(self, _, children):
         """A resource in the query preceded by a coma, to define a resource following an other one.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``COM`` (coma): ``None``.
             - 1: for ``NAMED_RESOURCE``: an instance of a subclass of ``.resources.Resource``.
@@ -193,12 +193,12 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return children[1]
 
     @rule('NEXT_RESOURCE*')
-    def visit_NEXT_RESOURCES(self, node, children):
+    def visit_next_resources(self, _, children):
         """A list of resource in the query following the first resource.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``NEXT_RESOURCE*``: a list of instances of subclasses of
                 ``.resources.Resource``.
@@ -229,12 +229,12 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return children
 
     @rule('RESOURCE NEXT_RESOURCES COM?')
-    def visit_CONTENT(self, node, children):
+    def visit_content(self, _, children):
         """The content of a resource, composed of a list of resources.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``RESOURCE``: first resource, instance of a subclass of
                  ``.resources.Resource``.
@@ -268,7 +268,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return [children[0]] + (children[1] or [])
 
     @rule('IDENT WS COL WS')
-    def visit_RESOURCE_NAME(self, node, children):
+    def visit_resource_name(self, _, children):
         """The name of a resource, to force a name of a resource.
 
         Without it, the resource entry name will be used.
@@ -277,7 +277,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``IDENT``: string, the name of the resource.
             - 1: for ``COL`` (colon separating the name and its ): ``None``.
@@ -300,7 +300,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return children[0]
 
     @rule('RESOURCE_NAME?')
-    def visit_OPTIONAL_RESOURCE_NAME(self, node, children):
+    def visit_optional_resource_name(self, _, children):
         """The optional name of a resource, to force a name of a resource if set.
 
         Without it, the resource entry name will be used.
@@ -309,7 +309,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``RESOURCE_NAME?``: string, the name of the resource.
 
@@ -330,12 +330,12 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return children[0] if children and children[0] else None
 
     @rule('FILTERS')
-    def visit_FIELD(self, node, children):
+    def visit_field(self, _, children):
         """A simple field.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``FILTERS``: list of instances of ``.resources.Field``.
 
@@ -357,7 +357,8 @@ class DataQLParser(FiltersParserMixin, BaseParser):
 
         return self.filters_to_resource(children[0], self.Field)
 
-    def filters_to_resource(self, filters, klass, **kwargs):
+    @staticmethod
+    def filters_to_resource(filters, klass, **kwargs):
         """Helper to create a resource taking its name and args from the first filter.
 
         This remove the first filter from the list of filters
@@ -376,7 +377,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
 
         return klass(**attrs)
 
-    def visit_subresource(self, klass, node, children):
+    def visit_subresource(self, klass, _, children):
         """Helper to create a List or Object.
 
         The name of the resource is the name of the first filter. And if this first filter doesn't
@@ -385,7 +386,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         Arguments
         ---------
         klass: The class for which we want an instance
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``FILTERS``: list of instances of ``.resources.Field``.
             - 1: for ``CUR_O`` or ``BRA_O`` (opening curly/bracket): ``None``.
@@ -410,7 +411,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return self.filters_to_resource(children[0], klass)
 
     @rule('FILTERS CUR_O CONTENT CUR_C')
-    def visit_OBJECT(self, node, children):
+    def visit_object(self, _, children):
         """Manage an object, represented by a ``.resources.Object`` instance.
 
         The first filter is removed to fill the name and args of the resource. See
@@ -419,7 +420,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``FILTERS``: list of instances of ``.resources.Field``.
             - 1: for ``CUR_O`` (opening curly): ``None``.
@@ -440,7 +441,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
         return self.filters_to_resource(children[0], self.Object, resources=children[2])
 
     @rule('FILTERS BRA_O CONTENT BRA_C')
-    def visit_LIST(self, node, children):
+    def visit_list(self, _, children):
         """Manage a list, represented by a ``.resources.List`` instance.
 
         The first filter is removed to fill the name and args of the resource. See
@@ -448,7 +449,7 @@ class DataQLParser(FiltersParserMixin, BaseParser):
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``FILTERS``: list of instances of ``.resources.Field``.
             - 1: for ``BRA_O`` (opening bracket): ``None``.

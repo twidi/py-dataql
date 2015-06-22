@@ -10,14 +10,15 @@ When we talk about "resources", we talk about instances of classes defined in ``
 
 """
 
+from abc import abstractmethod, ABCMeta
 from collections import Iterable
 
-from dataql.resources import Field, Filter, List, NamedArg, Object, PosArg
+from dataql.resources import Field, List, Object
 from dataql.solvers.exceptions import NotIterable
 from dataql.utils import class_repr
 
 
-class Solver:
+class Solver(metaclass=ABCMeta):
     """Base class for all solvers.
 
     The main entry point of a solver is the ``solve_resource`` method, which must be defined
@@ -67,8 +68,10 @@ class Solver:
         >>> registry = Registry()
         >>> from datetime import date
         >>> registry.register(date, allow_class=True)
-        >>> Solver(registry, date)
-        <Solver for source `datetime.date`>
+        >>> class MySolver(Solver):
+        ...     def cast(self, value, resource): return value
+        >>> MySolver(registry, date)
+        <MySolver for source `datetime.date`>
 
         """
 
@@ -134,7 +137,10 @@ class Solver:
         >>> from datetime import date
         >>> registry.register(date, allow_class=True)
         >>> registry.register(str, allow_class=True)
-        >>> solver = Solver(registry, date)
+        >>> class MySolver(Solver):
+        ...     def cast(self, value, resource): return value
+        >>> solver = MySolver(registry, date)
+        >>> from dataql.resources import Filter, NamedArg, PosArg
         >>> solver.solve_attribute_and_filters(date, Field('fromtimestamp',
         ...     args=[PosArg(1433109600)],
         ...     filters=[
@@ -149,7 +155,7 @@ class Solver:
         >>> from dataql.solvers.exceptions import CannotSolve
         >>> raise CannotSolve(solver, Field('fromtimestamp'), date)
         Traceback (most recent call last):
-        dataql.solvers.exceptions.CannotSolve: Solver `<Solver for source `datetime.date`>` \
+        dataql.solvers.exceptions.CannotSolve: Solver `<MySolver for source `datetime.date`>` \
 was not able to solve resource `<Field[fromtimestamp]>`.
 
         """
@@ -167,6 +173,7 @@ was not able to solve resource `<Field[fromtimestamp]>`.
 
         return result
 
+    @abstractmethod
     def cast(self, value, resource):
         """Convert the value got after ``solve_attribute_and_filters``.
 
@@ -321,7 +328,7 @@ class AttributeSolver(Solver):
         return str(value)
 
 
-class MultiResourcesBaseSolver(Solver):
+class MultiResourcesBaseSolver(Solver, metaclass=ABCMeta):
     """A base class for solver for resources with sub-resources.
 
     Notes

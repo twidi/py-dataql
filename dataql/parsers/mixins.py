@@ -9,10 +9,12 @@ It provides some mixin to ease the creation of complex parsers:
 
 """
 
+from abc import ABCMeta
+
 from dataql.parsers.base import BaseParser, rule
 
 
-class NamedArgsParserMixin(BaseParser):
+class NamedArgsParserMixin(BaseParser, metaclass=ABCMeta):
     """Parser mixin that provides rules to manage named arguments.
 
     A list of named arguments is a list of at least one named argument separated by a comma.
@@ -34,7 +36,7 @@ class NamedArgsParserMixin(BaseParser):
     >>> class TestParser(NamedArgsParserMixin, BaseParser):
     ...     default_rule = 'ROOT'
     ...     @rule('PAR_O NAMED_ARGS PAR_C')
-    ...     def visit_ROOT(self, node, children):
+    ...     def visit_root(self, _, children):
     ...         return 'Content with named args: %s' % children[1]
     ...
     >>> TestParser('(foo=TRUE, bar ="BAZ",quz=null)').data
@@ -45,12 +47,12 @@ class NamedArgsParserMixin(BaseParser):
     default_rule = 'NAMED_ARGS'
 
     @rule('NAMED_ARG NEXT_NAMED_ARGS')
-    def visit_NAMED_ARGS(self, node, children):
+    def visit_named_args(self, _, children):
         """Named arguments of a filter.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: instance of ``.resources.NamedArg``, first named argument
             - 1: list of instances of ``.resources.NamedArg``, other named arguments
@@ -75,12 +77,12 @@ class NamedArgsParserMixin(BaseParser):
         return [children[0]] + (children[1] or [])
 
     @rule('COM NAMED_ARG')
-    def visit_NEXT_NAMED_ARG(self, node, children):
+    def visit_next_named_arg(self, _, children):
         """Named argument of a filter following a previous one (so, preceded by a comma).
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``COM`` (comma): ``None``.
             - 1: for ``NAMED_ARG``: instance of ``.resources.NamedArg``.
@@ -109,12 +111,12 @@ class NamedArgsParserMixin(BaseParser):
         return children[1]
 
     @rule('NEXT_NAMED_ARG*')
-    def visit_NEXT_NAMED_ARGS(self, node, children):
+    def visit_next_named_args(self, _, children):
         """Named arguments of a filter following the first one.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 1: list of instances of ``.resources.NamedArg``.
 
@@ -141,12 +143,12 @@ class NamedArgsParserMixin(BaseParser):
         return children
 
     @rule('IDENT WS OPER WS VALUE')
-    def visit_NAMED_ARG(self, node, children):
+    def visit_named_arg(self, _, children):
         """Named argument of a filter.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: name of the arg
             - 1: for ``WS`` (whitespace): ``None``.
@@ -182,7 +184,7 @@ class NamedArgsParserMixin(BaseParser):
         )
 
 
-class UnnamedArgsParserMixin(BaseParser):
+class UnnamedArgsParserMixin(BaseParser, metaclass=ABCMeta):
     """Parser mixin that provides rules to manage unnamed arguments.
 
     A list of unnamed arguments is a list of at least one unnamed argument separated by a comma.
@@ -203,7 +205,7 @@ class UnnamedArgsParserMixin(BaseParser):
     >>> class TestParser(UnnamedArgsParserMixin, BaseParser):
     ...     default_rule = 'ROOT'
     ...     @rule('PAR_O UNNAMED_ARGS PAR_C')
-    ...     def visit_ROOT(self, node, children):
+    ...     def visit_root(self, _, children):
     ...         return 'Content with unnamed args: %s' % children[1]
     ...
     >>> TestParser('(1,null, "foo")').data
@@ -214,12 +216,12 @@ class UnnamedArgsParserMixin(BaseParser):
     default_rule = 'UNNAMED_ARGS'
 
     @rule('UNNAMED_ARG NEXT_UNNAMED_ARGS')
-    def visit_UNNAMED_ARGS(self, node, children):
+    def visit_unnamed_args(self, _, children):
         """Unnamed arguments of a filter.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: instance of ``.resources.PosArg``, first unnamed argument
             - 1: list of instances of ``.resources.PosArg``, other unnamed arguments
@@ -244,12 +246,12 @@ class UnnamedArgsParserMixin(BaseParser):
         return [children[0]] + (children[1] or [])
 
     @rule('COM UNNAMED_ARG')
-    def visit_NEXT_UNNAMED_ARG(self, node, children):
+    def visit_next_unnamed_arg(self, _, children):
         """Unnamed argument of a filter following a previous one (so, preceded by a comma).
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``COM`` (comma): ``None``.
             - 1: for ``UNNAMED_ARG``: instance of ``.resources.PosArg``.
@@ -278,12 +280,12 @@ class UnnamedArgsParserMixin(BaseParser):
         return children[1]
 
     @rule('NEXT_UNNAMED_ARG*')
-    def visit_NEXT_UNNAMED_ARGS(self, node, children):
+    def visit_next_unnamed_args(self, _, children):
         """Unnamed arguments of a filter following the first one.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 1: list of instances of ``.resources.PosArg``.
 
@@ -309,12 +311,12 @@ class UnnamedArgsParserMixin(BaseParser):
         return children
 
     @rule('VALUE')
-    def visit_UNNAMED_ARG(self, node, children):
+    def visit_unnamed_arg(self, _, children):
         """Unnamed argument of a filter.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: value of the unnamed arg
 
@@ -344,7 +346,8 @@ class UnnamedArgsParserMixin(BaseParser):
         )
 
 
-class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
+class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser,
+                      metaclass=ABCMeta):
     """Parser mixin that provides rules to manage arguments in parentheses.
 
     To use it, add this mixin to the class bases, and use``OPTIONAL_ARGS`` in your rule(s).
@@ -364,7 +367,7 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
     >>> class TestParser(ArgsParserMixin, BaseParser):
     ...     default_rule = 'ROOT'
     ...     @rule('IDENT OPTIONAL_ARGS')
-    ...     def visit_ROOT(self, node, children):
+    ...     def visit_root(self, _, children):
     ...         return 'Ident "%s" with args: %s' % tuple(children)
     ...
     >>> TestParser('something(1,null, "foo")').data
@@ -375,12 +378,12 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
     default_rule = 'OPTIONAL_ARGS'
 
     @rule('PAR_O OPTIONAL_ARGS_CONTENT PAR_C')
-    def visit_OPTIONAL_ARGS(self, node, children):
+    def visit_optional_args(self, _, children):
         """The optional arguments of a filter.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``PAR_O`` (opening parenthesis): ``None``.
             - 1: list of instances of subclasses of ``.resources.Arg``.
@@ -408,12 +411,12 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
         return children[1]
 
     @rule('ARGS?')
-    def visit_OPTIONAL_ARGS_CONTENT(self, node, children):
+    def visit_optional_args_content(self, _, children):
         """The optional arguments of a filter (part inside the parentheses).
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 1: list of instances of ``.resources.NamedArg`` or subclasses.
 
@@ -438,8 +441,8 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
 
         return children[0] if children else []
 
-    @rule('UNNAMED_ARGS_AND_NAMED_ARGS / UNNAMED_ARGS / NAMED_ARGS')
-    def visit_ARGS(self, node, children):
+    @rule('ALL_ARGS / UNNAMED_ARGS / NAMED_ARGS')
+    def visit_args(self, _, children):
         """Arguments of a filter (part inside the parentheses).
 
         The arguments of a filter can be named or not. But unnamed ones must always come first.
@@ -451,7 +454,7 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: list of instances of ``.resources.NamedArg`` or subclasses.
 
@@ -481,12 +484,12 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
         return children[0]
 
     @rule('UNNAMED_ARGS COM NAMED_ARGS')
-    def visit_UNNAMED_ARGS_AND_NAMED_ARGS(self, node, children):
-        """Unnamed arguments of a filter.
+    def visit_all_args(self, _, children):
+        """Unnamed and named arguments of a filter.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - o: list of instances of ``.resources.PosArg``.
             - 1: list of instances of ``.resources.NamedArg``.
@@ -499,10 +502,9 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
         Example
         -------
 
-        >>> ArgsParserMixin(r'1, foo="bar"', default_rule='UNNAMED_ARGS_AND_NAMED_ARGS').data
+        >>> ArgsParserMixin(r'1, foo="bar"', default_rule='ALL_ARGS').data
         [1, foo="bar"]
-        >>> ArgsParserMixin(r'1, 2,foo="bar", bar="qux"',
-        ... default_rule='UNNAMED_ARGS_AND_NAMED_ARGS').data
+        >>> ArgsParserMixin(r'1, 2,foo="bar", bar="qux"', default_rule='ALL_ARGS').data
         [1, 2, foo="bar", bar="qux"]
 
         """
@@ -510,7 +512,7 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser):
         return children[0] + children[2]
 
 
-class FiltersParserMixin(ArgsParserMixin, BaseParser):
+class FiltersParserMixin(ArgsParserMixin, BaseParser, metaclass=ABCMeta):
     """Parser mixin that provides rules to manage arguments in parentheses.
 
     To use it, add this mixin to the class bases, and use``OPTIONAL_ARGS`` in your rule(s).
@@ -531,7 +533,7 @@ class FiltersParserMixin(ArgsParserMixin, BaseParser):
     >>> class TestParser(FiltersParserMixin, BaseParser):
     ...     default_rule = 'ROOT'
     ...     @rule('IDENT DOT FILTERS')
-    ...     def visit_ROOT(self, node, children):
+    ...     def visit_root(self, _, children):
     ...         return 'Ident "%s" filtered with %s' % (children[0], children[2])
     ...
     >>> TestParser('qux.foo().bar.baz(True, x=1)').data
@@ -542,12 +544,12 @@ class FiltersParserMixin(ArgsParserMixin, BaseParser):
     default_rule = 'FILTERS'
 
     @rule('FILTER NEXT_FILTERS')
-    def visit_FILTERS(self, node, children):
+    def visit_filters(self, _, children):
         """A succession of filters.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: instance of ``.resources.Filter``, the first filter
             - 1: list of instances of ``.resources.Filter``, the other filters
@@ -572,12 +574,12 @@ class FiltersParserMixin(ArgsParserMixin, BaseParser):
         return [children[0]] + (children[1] or [])
 
     @rule('IDENT FILTER_ARGS')
-    def visit_FILTER(self, node, children):
+    def visit_filter(self, _, children):
         """A filter, with optional arguments.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: string, name of the filter.
             - 1: list of instances of ``.resources.NamedArg``
@@ -608,12 +610,12 @@ class FiltersParserMixin(ArgsParserMixin, BaseParser):
         )
 
     @rule('OPTIONAL_ARGS?')
-    def visit_FILTER_ARGS(self, node, children):
+    def visit_filter_args(self, _, children):
         """The optional arguments of a filter.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: list of instances of ``.resources.NamedArg`` or subclasses,  or None
 
@@ -640,12 +642,12 @@ class FiltersParserMixin(ArgsParserMixin, BaseParser):
         return children[0] if children else None
 
     @rule('NEXT_FILTER*')
-    def visit_NEXT_FILTERS(self, node, children):
+    def visit_next_filters(self, _, children):
         """Optional filters following a first one.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: list of instances of ``.resources.Filter``
 
@@ -669,12 +671,12 @@ class FiltersParserMixin(ArgsParserMixin, BaseParser):
         return children
 
     @rule('DOT FILTER')
-    def visit_NEXT_FILTER(self, node, children):
+    def visit_next_filter(self, _, children):
         """A filter that follow another one (so it starts with a dot).
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``DOT`` (a dot): ``None``.
             - 1: instance of ``.resources.Filter``

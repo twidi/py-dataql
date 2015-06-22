@@ -5,6 +5,9 @@ may be defined in sub modules inherit from..
 
 """
 
-class DataQLException(Exception):
+from abc import ABCMeta
+
+
+class DataQLException(Exception, metaclass=ABCMeta):
     """Base for exceptions raised by dataql code."""
     pass
