@@ -15,10 +15,10 @@ The three resources are:
 - ``Object`` : the value is an object from which we want some fields.
 - ``List`` : the value is an iterable, and for each entry we want some fields
 
-A resource has a name, but can also have filters (``Filter`` class). The attribute is retrieved
-from the value using the name (and the arguments if any, ``NamedArg`` and ``PosArg``), and then
-the first filter is applied to this value, then the next filter from the result of the first
-filter, and so one.
+A resource has a name, but can also have filters (``Filter`` class and subclasses).
+The attribute is retrieved from the value using the name (or by calling a function with this name)
+and the arguments if any (``NamedArg`` and ``PosArg``), and then the first filter is applied to
+this value, then the next filter from the result of the first filter, and so one.
 When all filters are applied, the value is casted (number, string... for ``Field``, dictionary
 for ``Object`` and list for ``List``.
 
@@ -50,8 +50,13 @@ class WithArgsMixin(metaclass=ABCMeta):
     """
 
     def __init__(self, **kwargs):
-        """Save arguments in the ``args`` attribute and mark self as the args parent."""
-        self.args = kwargs['args']
+        """Call ``save_args`` to save arguments."""
+        self.args = None
+        self.save_args(**kwargs)
+
+    def save_args(self, **kwargs):
+        """Save arguments in the ``kwargs`` attribute and mark self as the args parent."""
+        self.args = kwargs.get('args')
 
         if self.args:
             for arg in self.args:
@@ -320,7 +325,7 @@ class Object(MultiResources):
 
 
 class Filter(WithArgsMixin):
-    """A filter is simply an attribute to call from a previous value.
+    """A filter is simply an attribute to call from a previous value, or a standalone function.
 
     This previous value could be a previous filter, or the main value got from the resource.
 
@@ -335,6 +340,7 @@ class Filter(WithArgsMixin):
         The ``Resource`` subclass instance having this filter.
 
     """
+
     __slots__ = (
         'name',
         'args',
@@ -393,6 +399,104 @@ class Filter(WithArgsMixin):
     def set_parent(self, parent):
         """Set the given parent as the parent resource."""
         self.parent = parent
+
+
+class SliceFilter(Filter):
+    """A slice used as a filter to get one or many entries from an iterable..
+
+    Only one of the ``slice`` and ``index`` attributes are defined for a ``SliceFilter`` object.
+
+    Attributes
+    ----------
+    name : string
+        The name of this filter will always be "slice" (name is required from the parent class)
+    slice : slice
+        A ``slice`` object with its attributes: ``start``, ``stop``, ``step``.
+    index : int
+        An integer for a simple item retrieval
+    parent : Resource
+        The ``Resource`` subclass instance having this slice-filter.
+
+    """
+
+    __slots__ = (
+        'name',
+        'slice',
+        'index',
+        'parent'
+    )
+
+    def __init__(self, slice_info):
+        """Save attributes.
+
+        Arguments
+        ---------
+
+        Notes:
+        -----
+        A forced name, ``slice`` is passed to the parent ``__init__`` method.
+        slice_info : slice or number
+            If a ``slice``, value will be saved in ``self.slice``, otherwise in ``self.index``.
+
+        """
+
+        super().__init__('slice')
+        if isinstance(slice_info, slice):
+            self.slice, self.index = slice_info, None
+        else:
+            self.slice, self.index = None, slice_info
+
+    def __repr__(self):
+        """String representation of a ``SliceFilter`` instance.
+
+        Returns
+        -------
+        str
+            The string representation of the current ``SliceFilter`` instance.
+
+        Example
+        -------
+
+        >>> SliceFilter(1)
+        [1]
+        >>> SliceFilter(slice(None, None, None))
+        [:]
+        >>> SliceFilter(slice(1, None, None))
+        [1:]
+        >>> SliceFilter(slice(None, 2, None))
+        [:2]
+        >>> SliceFilter(slice(1, 2, None))
+        [1:2]
+        >>> SliceFilter(slice(None, None, 3))
+        [::3]
+        >>> SliceFilter(slice(None, 2, 3))
+        [:2:3]
+        >>> SliceFilter(slice(1, None, 3))
+        [1::3]
+        >>> SliceFilter(slice(1, 2, 3))
+        [1:2:3]
+
+        """
+
+        # Manage simple index.
+        if self.index is not None:
+            return '[%s]' % self.index
+
+        # Manage ``slice`` object.
+        if self.slice.step is None:
+            if self.slice.stop is None:
+                return '[:]' if self.slice.start is None else '[%s:]' % self.slice.start
+            else:
+                return '[%s:%s]' % (
+                    '' if self.slice.start is None else self.slice.start,
+                    self.slice.stop
+                )
+        else:
+            return '[%s:%s:%s]' % (
+                '' if self.slice.start is None else self.slice.start,
+                '' if self.slice.stop is None else self.slice.stop,
+                self.slice.step,
+            )
 
 
 class Arg:

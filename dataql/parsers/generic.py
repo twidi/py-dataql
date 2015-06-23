@@ -5,14 +5,12 @@ provided by the ``dataql`` library.
 
 """
 
-from parsimonious import IncompleteParseError
-
 from dataql.parsers.base import BaseParser, rule
 from dataql.parsers.exceptions import ParserError
-from dataql.parsers.mixins import FiltersParserMixin
+from dataql.parsers.mixins import FiltersWithSlicingParserMixin
 
 
-class DataQLParser(FiltersParserMixin, BaseParser):
+class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
     """A parser using a opinionated language
 
     Example
