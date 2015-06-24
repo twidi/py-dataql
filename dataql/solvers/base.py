@@ -15,13 +15,12 @@ from collections import Iterable
 
 from dataql.resources import Field, List, Object
 from dataql.solvers.exceptions import NotIterable
-from dataql.utils import class_repr
 
 
 class Solver(metaclass=ABCMeta):
     """Base class for all solvers.
 
-    The main entry point of a solver is the ``solve_resource`` method, which must be defined
+    The main entry point of a solver is the ``solve`` method, which must be defined
     for every solver.
 
     Attributes
@@ -31,27 +30,22 @@ class Solver(metaclass=ABCMeta):
         Must be defined in each sub-classes.
     registry : dataql.solvers.registry.Registry
         The registry that instantiated this solver.
-    source : dataql.solvers.registry.Source
-        The ``Source`` object that will be used to solve a value.
 
     """
 
     solvable_resources = ()
 
-    def __init__(self, registry, source):
+    def __init__(self, registry):
         """Init the solver.
 
         Arguments
         ---------
         registry : dataql.solvers.registry.Registry
             The registry to use to get the source and solve sub-resources if any.
-        source : ?
-            An instance of a class (or the class itself) that must be available in the registry.
 
         """
 
         self.registry = registry
-        self.source = self.registry[source]
 
     def __repr__(self):
         """String representation of a ``Solver`` instance.
@@ -70,31 +64,29 @@ class Solver(metaclass=ABCMeta):
         >>> registry.register(date, allow_class=True)
         >>> class MySolver(Solver):
         ...     def cast(self, value, resource): return value
-        >>> MySolver(registry, date)
-        <MySolver for source `datetime.date`>
+        >>> MySolver(registry)
+        <MySolver>
 
         """
 
-        return '<%s for source `%s`>' % (
-            self.__class__.__name__,
-            class_repr(self.source.source)
-        )
+        return '<%s>' % self.__class__.__name__
 
-    def solve_resource(self, value, resource):
+    def solve(self, value, resource):
         """Solve a resource with a value.
 
         Arguments
         ---------
         value : ?
-            A value to solve in combination with the given resource. Must be a value that has
-            an attribute named as the resource name.
+            A value to solve in combination with the given resource. The first filter of the
+            resource will be applied on this value (next filters on the result of the previous
+            filter).
         resource : Resource
             An instance of a subclass of ``dataql.resources.Resource`` to solve with the given
             value.
 
         Returns
         -------
-        (depends on the implementation of the ``cast`` method.
+        (depends on the implementation of the ``cast`` method)
 
         Raises
         ------
@@ -104,30 +96,31 @@ class Solver(metaclass=ABCMeta):
 
         Notes
         -----
-        This method simply calls ``solve_attribute_and_filters``, then ``cast`` with the result.
+        This method simply calls ``solve_value``, then ``cast`` with the result.
         To change the behavior, simply override one of these two methods.
 
         """
 
-        result = self.solve_attribute_and_filters(value, resource)
+        result = self.solve_value(value, resource)
         return self.cast(result, resource)
 
-    def solve_attribute_and_filters(self, value, resource):
+    def solve_value(self, value, resource):
         """Solve a resource with a value, without casting.
 
         Arguments
         ---------
         value : ?
-            A value to solve in combination with the given resource. Must be a value that has
-            an attribute named as the resource name.
+            A value to solve in combination with the given resource. The first filter of the
+            resource will be applied on this value (next filters on the result of the previous
+            filter).
         resource : Resource
             An instance of a subclass of ``dataql.resources.Resource`` to solve with the given
             value.
 
         Returns
         -------
-        The content of the attribute from ``value`` defined by the resource, with all filters
-        applied.
+        The result of all filters applied on the value for the first filter, and result of the
+        previous filter for next filters.
 
         Example
         -------
@@ -139,11 +132,11 @@ class Solver(metaclass=ABCMeta):
         >>> registry.register(str, allow_class=True)
         >>> class MySolver(Solver):
         ...     def cast(self, value, resource): return value
-        >>> solver = MySolver(registry, date)
+        >>> solver = MySolver(registry)
         >>> from dataql.resources import Filter, NamedArg, PosArg
-        >>> solver.solve_attribute_and_filters(date, Field('fromtimestamp',
-        ...     args=[PosArg(1433109600)],
+        >>> solver.solve_value(date, Field('fromtimestamp',
         ...     filters=[
+        ...         Filter(name='fromtimestamp', args=[PosArg(1433109600)]),
         ...         Filter(name='replace', args=[NamedArg('year', '=', 2014)]),
         ...         Filter(name='strftime', args=[PosArg('%F')]),
         ...         Filter(name='replace', args=[PosArg('2014'), PosArg('2015')]),
@@ -153,19 +146,16 @@ class Solver(metaclass=ABCMeta):
 
         # Example of how to raise a ``CannotSolve`` exception.
         >>> from dataql.solvers.exceptions import CannotSolve
-        >>> raise CannotSolve(solver, Field('fromtimestamp'), date)
+        >>> raise CannotSolve(solver, Field('fromtimestamp'), date)  # doctest: +ELLIPSIS
         Traceback (most recent call last):
-        dataql.solvers.exceptions.CannotSolve: Solver `<MySolver for source `datetime.date`>` \
-was not able to solve resource `<Field[fromtimestamp]>`.
+        dataql...CannotSolve: Solver `<MySolver>` was not able to solve...`<Field[fromtimestamp]>`.
 
         """
 
-        args, kwargs = resource.get_args_and_kwargs()
+        # The given value is the starting point on which we apply the first filter.
+        result = value
 
-        # Get the value of the attribute, with optional arguments.
-        result = self.source.solve(value, resource.name, args, kwargs)
-
-        # Apply filters one by one
+        # Apply filters one by one on the previous result.
         for filter_ in resource.filters:
             args, kwargs = filter_.get_args_and_kwargs()
             source = self.registry[result]
@@ -175,7 +165,7 @@ was not able to solve resource `<Field[fromtimestamp]>`.
 
     @abstractmethod
     def cast(self, value, resource):
-        """Convert the value got after ``solve_attribute_and_filters``.
+        """Convert the value got after ``solve_value``.
 
         Must be implemented in subclasses.
 
@@ -216,7 +206,7 @@ was not able to solve resource `<Field[fromtimestamp]>`.
 
 
 class AttributeSolver(Solver):
-    """Solver aimed to retrieve attributes from values.
+    """Solver aimed to retrieve fields from values.
 
     This solver can only handle ``dataql.resources.Field`` resources.
 
@@ -232,8 +222,8 @@ class AttributeSolver(Solver):
     >>> registry = Registry()
     >>> from datetime import date
     >>> registry.register(date)
-    >>> solver = AttributeSolver(registry, date)
-    >>> solver.solve_resource(date(2015, 6, 1), Field('year'))
+    >>> solver = AttributeSolver(registry)
+    >>> solver.solve(date(2015, 6, 1), Field('year'))
     2015
 
     """
@@ -258,6 +248,8 @@ class AttributeSolver(Solver):
         ---------
         value : ?
             The value to be casted.
+        resource : dataql.resources.Resource
+            The ``Resource`` object used to obtain this value from the original one.
 
         Returns
         -------
@@ -271,7 +263,7 @@ class AttributeSolver(Solver):
         >>> registry = Registry()
         >>> from datetime import date
         >>> registry.register(date)
-        >>> solver = AttributeSolver(registry, date)
+        >>> solver = AttributeSolver(registry)
         >>> solver.cast('foo', None)
         'foo'
         >>> solver.cast(11, None)
@@ -302,8 +294,8 @@ class AttributeSolver(Solver):
         ---------
         value : ?
             The value to be casted.
-        attribute : str
-            The name of the attribute from which the value was fetched.
+        resource : dataql.resources.Resource
+            The ``Resource`` object used to obtain this value from the original one.
 
         Returns
         -------
@@ -317,7 +309,7 @@ class AttributeSolver(Solver):
         >>> registry = Registry()
         >>> from datetime import date
         >>> registry.register(date)
-        >>> solver = AttributeSolver(registry, date)
+        >>> solver = AttributeSolver(registry)
         >>> solver.cast_default(date(2015, 6, 1), None)
         '2015-06-01'
         >>> solver.cast_default(date, None)
@@ -347,14 +339,13 @@ class MultiResourcesBaseSolver(Solver, metaclass=ABCMeta):
             The value to get some resources from.
         resources : iterable[dataql.resource.Resource]
             A list (or other iterable) of resources (instances of ``dataql.resource.Resource``
-            subclasses.
+            subclasses).
 
         Returns
         -------
         dict
             A dictionary containing the wanted resources for the given value.
-            Key are the ``entry_name`` attributes of the resources, and the values are the
-            solved values.
+            Key are the ``name`` attributes of the resources, and the values are the solved values.
 
         Example
         -------
@@ -362,7 +353,7 @@ class MultiResourcesBaseSolver(Solver, metaclass=ABCMeta):
         >>> registry = Registry()
         >>> from datetime import date
         >>> registry.register(date)
-        >>> solver = ObjectSolver(registry, date)
+        >>> solver = ObjectSolver(registry)
         >>> d = solver.solve_subresources(date(2015, 6, 1), [
         ... Field('day'), Field('month'), Field('year')])
         >>> [(k, d[k]) for k in sorted(d)]
@@ -370,11 +361,11 @@ class MultiResourcesBaseSolver(Solver, metaclass=ABCMeta):
 
         """
 
-        return {r.entry_name: self.registry.solve(value, r) for r in resources}
+        return {r.name: self.registry.solve(value, r) for r in resources}
 
 
 class ObjectSolver(MultiResourcesBaseSolver):
-    """Solver aimed to retrieve many attributes from values.
+    """Solver aimed to retrieve many fields from values.
 
     This solver can only handle ``dataql.resources.Object`` resources.
 
@@ -392,8 +383,8 @@ class ObjectSolver(MultiResourcesBaseSolver):
         ...     date = date(2015, 6, 1),
         ... )
 
-        >>> solver = ObjectSolver(registry, obj.__class__)
-        >>> d = solver.solve_resource(
+        >>> solver = ObjectSolver(registry)
+        >>> d = solver.solve(
         ...     obj,
         ...     Object('date', resources=[Field('day'), Field('month'), Field('year')])
         ... )
@@ -412,14 +403,13 @@ class ObjectSolver(MultiResourcesBaseSolver):
         value : ?
             The value to get some resources from.
         resource : dataql.resources.Object
-            An instance of ``dataql.resources.Object`` (or a sub-class)
+            The ``Object`` object used to obtain this value from the original one.
 
         Returns
         -------
         dict
             A dictionary containing the wanted resources for the given value.
-            Key are the ``entry_name`` attributes of the resources, and the values are the
-            solved values.
+            Key are the ``name`` attributes of the resources, and the values are the solved values.
 
         """
 
@@ -427,7 +417,7 @@ class ObjectSolver(MultiResourcesBaseSolver):
 
 
 class ListSolver(MultiResourcesBaseSolver):
-    """Solver aimed to retrieve many attributes from many values of the same type.
+    """Solver aimed to retrieve many fields from many values of the same type.
 
     This solver can only handle ``dataql.resources.List`` resources.
 
@@ -446,16 +436,16 @@ class ListSolver(MultiResourcesBaseSolver):
         ...     date = date(2015, 6, 1),
         ... )
 
-        >>> solver = ListSolver(registry, obj.__class__)
+        >>> solver = ListSolver(registry)
 
-        >>> ds = list(solver.solve_resource(
+        >>> ds = list(solver.solve(
         ...     obj,
         ...     List('dates', resources=[Field('day'), Field('month'), Field('year')])
         ... ))
         >>> [[(k, d[k]) for k in sorted(d)] for d in ds]
         [[('day', 1), ('month', 6), ('year', 2015)], [('day', 2), ('month', 6), ('year', 2015)]]
 
-        >>> ds = list(solver.solve_resource(
+        >>> ds = list(solver.solve(
         ...     obj,
         ...     List('date', resources=[Field('day'), Field('month'), Field('year')])
         ... )) # doctest: +ELLIPSIS
@@ -475,22 +465,21 @@ class ListSolver(MultiResourcesBaseSolver):
         value : iterable
             The list (or other iterable) to get values to get some resources from.
         resource : dataql.resources.List
-            An instance of ``dataql.resources.List`` (or a sub-class)
+            The ``List`` object used to obtain this value from the original one.
 
         Returns
         -------
         list[dict]
             A list of dictionaries containing the wanted resources for the given values.
-            Key are the ``entry_name`` attributes of the resources, and the values are the
-            solved values.
+            Key are the ``name`` attributes of the resources, and the values are the solved values.
 
         Raises
         ------
         dataql.solvers.exceptions.NotIterable
-            When the resource from value is not iterable.
+            When the value is not iterable.
 
         """
 
         if not isinstance(value, Iterable):
-            raise NotIterable(resource, self.source)
+            raise NotIterable(resource, self.registry[value])
         return [self.solve_subresources(entry, resource.resources) for entry in value]

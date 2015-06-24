@@ -14,7 +14,10 @@ Example
 >>> registry.register(date, ['strftime'])
 >>> entry_points = EntryPoints(registry, today=date(2015, 6, 1))
 >>> from dataql.resources import *
->>> resource = Field('today', filters=[Filter('strftime', args=[PosArg('%F')])])
+>>> resource = Field('today', filters=[
+...     Filter('today'),
+...     Filter('strftime', args=[PosArg('%F')]),
+... ])
 >>> registry.solve(entry_points, resource)
 '2015-06-01'
 
@@ -560,7 +563,10 @@ def EntryPoints(registry, **kwargs):
     >>> registry.register(date, ['strftime'])
     >>> entry_points = EntryPoints(registry, today=date(2015, 6, 1))
     >>> from dataql.resources import *
-    >>> resource = Field('today', filters=[Filter('strftime', args=[PosArg('%F')])])
+    >>> resource = Field('today', filters=[
+    ...     Filter('today'),
+    ...     Filter('strftime', args=[PosArg('%F')]),
+    ... ])
     >>> registry.solve(entry_points, resource)
     '2015-06-01'
 
@@ -798,6 +804,9 @@ class Registry(Mapping):
         List of solver classes to use for solving a (value, resource) couple. The order is
         important because the first one that returns ``True`` to a call to its ``can_solve``
         method will be used.
+    _solvers_cache : dict
+        To cache instances of solver classes. Each solver class only take the registry as
+        argument, so one instance can be used for every value to solve.
     Source : class (class attribute)
         The class to use as for ``Source`` (to store each registered source). Default to
         ``dataql.solvers.registry.Source``.
@@ -824,9 +833,10 @@ class Registry(Mapping):
     Source = Source
 
     def __init__(self):
-        """Init the sources as an empty dictionary."""
+        """Init the attributes."""
 
         self.sources = {}
+        self._solvers_cache = {}
 
     def __repr__(self):
         """String representation of a ``Registry`` instance.
@@ -1096,7 +1106,7 @@ class Registry(Mapping):
             A value to be solved with the given resource.
         resource : Resource
             An instance of a subclass of ``dataql.resources.Resource`` to be solved with the
-            given value..
+            given value.
 
         Returns
         -------
@@ -1149,8 +1159,11 @@ class Registry(Mapping):
         solvers_classes = self.get_solvers_classes(resource)
         for solver_class in solvers_classes:
             try:
-                solver = solver_class(self, value)
-                return solver.solve_resource(value, resource)
+                # Save solver object in cache if not already done.
+                if solver_class not in self._solvers_cache:
+                    self._solvers_cache[solver_class] = solver_class(self)
+                # Do the solving.
+                return self._solvers_cache[solver_class].solve(value, resource)
             except CannotSolve:
                 continue
         raise SolveFailure(self, resource, value)

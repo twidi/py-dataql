@@ -11,7 +11,7 @@ from dataql.parsers.mixins import FiltersWithSlicingParserMixin
 
 
 class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
-    """A parser using a opinionated language
+    """A parser using a opinionated language.
 
     Example
     -------
@@ -28,8 +28,8 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
     ... ''').data
     <Object[current_user]>
       <Field[name] />
-      <Field[email] email.lowercase() />
-      <List[friends] friends.sorted(by="date").limit(10)>
+      <Field[email] .email.lowercase() />
+      <List[friends] .friends.sorted(by="date").limit(10)>
         <Field[name] />
         <Field[email] />
       </List[friends]>
@@ -178,7 +178,7 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
         Returns
         -------
         .resources.Resource
-            An instance of a subclass of ``.resources.Resource``, with its ``entry_name`` field set
+            An instance of a subclass of ``.resources.Resource``, with its ``name`` field set
             to the name in the query if set.
 
         Example
@@ -187,15 +187,15 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
         >>> DataQLParser(r'bar', default_rule='NAMED_RESOURCE').data
         <Field[bar] />
         >>> DataQLParser(r'foo:bar', default_rule='NAMED_RESOURCE').data
-        <Field[foo] bar />
+        <Field[foo] .bar />
         >>> DataQLParser(r'foo : bar', default_rule='NAMED_RESOURCE').data
-        <Field[foo] bar />
+        <Field[foo] .bar />
 
         """
 
-        entry_name, resource = children
-        if entry_name:
-            resource.entry_name = entry_name
+        name, resource = children
+        if name:
+            resource.name = name
         return resource
 
     @rule('COM NAMED_RESOURCE')
@@ -386,27 +386,19 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
         >>> DataQLParser(r'foo', default_rule='FIELD').data
         <Field[foo] />
         >>> DataQLParser(r'foo(1)', default_rule='FIELD').data
-        <Field[foo] foo(1) />
+        <Field[foo] .foo(1) />
         >>> DataQLParser(r'foo.bar()', default_rule='FIELD').data
-        <Field[foo] foo.bar() />
+        <Field[foo] .foo.bar() />
         """
 
         return self.filters_to_resource(children[0], self.Field)
 
     @staticmethod
     def filters_to_resource(filters, klass, **kwargs):
-        """Helper to create a resource taking its name and args from the first filter.
-
-        This remove the first filter from the list of filters
-
-        """
-
-        first_filter = filters.pop(0)
+        """Helper to create a resource taking its name from the first filter."""
 
         attrs = {
-            'name': first_filter.name,
-            'entry_name': first_filter.name,
-            'args': first_filter.args,
+            'name': filters[0].name,
             'filters': filters,
         }
         attrs.update(kwargs)
@@ -438,7 +430,7 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
           <Field[name] />
         </Object[foo]>
         >>> DataQLParser(r'foo(1)[name]', default_rule='LIST').data
-        <List[foo] foo(1)>
+        <List[foo] .foo(1)>
           <Field[name] />
         </List[foo]>
 
@@ -497,7 +489,7 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
         -------
 
         >>> DataQLParser(r'foo(1)[name]', default_rule='LIST').data
-        <List[foo] foo(1)>
+        <List[foo] .foo(1)>
           <Field[name] />
         </List[foo]>
 

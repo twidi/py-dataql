@@ -3,10 +3,7 @@
 It provides the different classes that are used to store a usable structure from a query
 parsed by a dataql parser.
 
-We have three resources. Each one can have zero to many filters, but at least a name and maybe a
-different "entry_name" (if given, it will be the name used in the result instead of the identifier)
-
-The name of the resource if the attribute that will be retrieved from a value.
+We have three resources. Each one has a name, and filters (``Filter`` class and subclasses).
 
 The three resources are:
 
@@ -15,12 +12,14 @@ The three resources are:
 - ``Object`` : the value is an object from which we want some fields.
 - ``List`` : the value is an iterable, and for each entry we want some fields
 
-A resource has a name, but can also have filters (``Filter`` class and subclasses).
-The attribute is retrieved from the value using the name (or by calling a function with this name)
-and the arguments if any (``NamedArg`` and ``PosArg``), and then the first filter is applied to
-this value, then the next filter from the result of the first filter, and so one.
-When all filters are applied, the value is casted (number, string... for ``Field``, dictionary
-for ``Object`` and list for ``List``.
+The name is used as the entry-point for the output, and filters are used to retrieve data from
+the value (the first filter uses the main value, and each next filter use the result of the
+previous filter).
+A filter may be an attribute, that may be callable (which can have arguments if any
+(``NamedArg`` and ``PosArg``), but it could also be a standalone function (taking the value
+as first argument, and then the other arguments)
+When all filters are applied, the final value is casted (number, string... for ``Field``,
+dictionary for ``Object`` and list for ``List``).
 
 
 To use subclasses of the classes defined here, they must be set on the parser:
@@ -38,83 +37,24 @@ __all__ = ('Field', 'List', 'Object', 'Filter', 'NamedArg', 'PosArg')
 from abc import ABCMeta
 
 
-class WithArgsMixin(metaclass=ABCMeta):
-    """Mixin to manage entities accepting arguments.
-
-    Attributes
-    ----------
-    args : list, or None
-        If ``None``, the entity is marked as not taking any argument, ie not callable.
-        If a list, it's the list of subclasses of ``Arg`` to use as arguments.
-
-    """
-
-    def __init__(self, **kwargs):
-        """Call ``save_args`` to save arguments."""
-        self.args = None
-        self.save_args(**kwargs)
-
-    def save_args(self, **kwargs):
-        """Save arguments in the ``kwargs`` attribute and mark self as the args parent."""
-        self.args = kwargs.get('args')
-
-        if self.args:
-            for arg in self.args:
-                arg.set_parent(self)
-
-    def get_args_and_kwargs(self):
-        """Return a list and a dict usable as ``*args, **kwargs`` to pass to a callable."
-
-        If the entity is known to not accept arguments (``self.args`` is ``None``), then this
-        method returns ``None`` for both args and kwargs.s
-
-        Returns
-        -------
-        tuple (list or None, dict or None)
-            A tuple with as first value, the list of positioned arguments (or ``None``), and as
-            second value the dict of named arguments (or ``None``)
-
-        """
-
-        args = None
-        kwargs = None
-
-        if self.args:
-            args = []
-            kwargs = {}
-            for arg in self.args:
-                if arg.is_named:
-                    kwargs[arg.arg] = arg.value
-                else:
-                    args.append(arg.value)
-
-        return args, kwargs
-
-
-class Resource(WithArgsMixin, metaclass=ABCMeta):
+class Resource(metaclass=ABCMeta):
     """Base class for all resource classes.
 
-    A resource is mainly a attribute to retrieve from a value (via a solver).
-    This attribute may be callable, so the resource may have arguments.
-    The resource can also have filters to apply the the attribute.
+    A resource is a name and some filters.
+    The name will be used as the entry point in the output, and the filters will be
+    applied to a value (each filter applied to the result of the previous filter)
 
     Attributes
     ----------
     name : string
-        The name of the attribute to get from a value.
-    entry_name : string
-        The name to use in the result instead of the ``name`` attribute. If not defined, the
-        ``name`` attribute is used. Allow to retrieve the same attribute many times (for example
-        with different filters) and have them all in the final result under different names.
+        The name of the resource on the output.
     is_root : boolean
         ``True`` if it's the root resource, which have no parent. ``False`` otherwise.
-    args : list, or None
-        Arguments (list of subclasses of ``Arg``) to apply to the attribute represented by this
-        resource. If not ``None``, the argument is assumed to be callable.
-    filters : list
-        List of ``Filter``. Each filter will be applied to the result of the previous one (the first
-        filter being applied to the result of the attribute represented by the name of the
-        resource)
+    filters : list, optional
+        List of ``Filter``. Each filter will be applied to the result of the previous one (the
+        first filter being applied to the value passed to the solver)
+        If no filter was given on ``__init__``, a filter will be added with the name of
+        the resource (to fetch this name as an attribute during solving)
     parent : Resource, or None
         Back reference to the parent resource. ``None`` if it's the root resource.
 
@@ -122,14 +62,12 @@ class Resource(WithArgsMixin, metaclass=ABCMeta):
 
     __slots__ = (
         'name',
-        'entry_name',
         'is_root',
-        'args',
         'filters',
         'parent',
     )
 
-    def __init__(self, name, entry_name=None, args=None, filters=None, is_root=False):
+    def __init__(self, name, filters=None, is_root=False):
         """Save attributes and set ``self`` as parent for the given filters.
 
         See the definition of the attributes on the class for more information about
@@ -138,25 +76,19 @@ class Resource(WithArgsMixin, metaclass=ABCMeta):
         Arguments
         ---------
         name : string
-        entry_name : string, optional, default to ``name``
-        args : list, optional, default to ``None``
-        filters : list, optional, default to ``[]``
+        filters : list or None
         is_root : boolean, optional, default to ``False``
-
-        Notes:
-        -----
-        The only mandatory argument is ``name``.
 
         """
 
-        super().__init__(args=args)
-
         self.name = name
-        self.entry_name = entry_name or name
         self.is_root = is_root
         self.filters = filters or []
 
         self.parent = None
+
+        if not self.filters:
+            self.filters = [Filter(name=self.name)]
 
         for filter_ in self.filters:
             filter_.set_parent(self)
@@ -172,26 +104,28 @@ class Resource(WithArgsMixin, metaclass=ABCMeta):
         Example
         -------
 
-        >>> Resource(name='foo', entry_name='bar', args=[
-        ...     PosArg(1),
-        ...     NamedArg('a', '=', 2),
-        ... ], filters=[
+        >>> Resource(name='bar', filters=[
+        ...     Filter('foo', args=[
+        ...         PosArg(1),
+        ...         NamedArg('a', '=', 2)
+        ...     ]),
         ...     Filter('filter', args=[
         ...         PosArg(3)
         ...     ])
         ... ], is_root=True)
-        <Resource[bar] foo(1, a=2).filter(3) />
+        <Resource[bar] .foo(1, a=2).filter(3) />
 
         """
 
-        name = ' ' + self.name if self.filters or self.args or self.name != self.entry_name else ''
-        result = '%(indent)s<%(cls)s[%(entry_name)s]%(name)s%(args)s%(filters)s />' % {
+        filters = ''
+        if len(self.filters) > 1 or self.filters[0].name != self.name or self.filters[0].args:
+            filters = ' ' + ''.join(map(str, self.filters))
+
+        result = '%(indent)s<%(cls)s[%(name)s]%(filters)s />' % {
             'cls': self.__class__.__name__,
-            'entry_name': self.entry_name,
-            'name': '%s' % name,
-            'args': '' if self.args is None else '(%s)' % ', '.join(map(str, self.args)),
-            'filters': ''.join(map(str, self.filters)) if self.filters else '',
-            'indent': '  ' * self.get_level()
+            'name': '%s' % self.name,
+            'filters': filters,
+            'indent': '  ' * self.get_level(),
         }
         return result
 
@@ -216,16 +150,16 @@ class Resource(WithArgsMixin, metaclass=ABCMeta):
 
 
 class Field(Resource):
-    """A simple attribute to retrieve from a value (with or without filters."""
+    """A simple field to retrieve from a value by using its filters."""
 
     pass
 
 
 class MultiResources(Resource, metaclass=ABCMeta):
-    """Base class for multi resources: get many attributes for one resource.
+    """Base class for multi resources: get many fields for one resource.
 
     It simply add a ``resources`` attributes to the base ``Resource`` class.
-    Each sub-resource is an attribute of the main attribute.
+    Each sub-resource is an field to retrieve of the main value using some filters.
 
     For example, the main attribute could be a date, and the sub-resources could
     be a list of ``Field`` resources: "day", "month", and "year".
@@ -237,8 +171,7 @@ class MultiResources(Resource, metaclass=ABCMeta):
 
     """
 
-    def __init__(self, name, entry_name=None, args=None, filters=None, is_root=False,
-                 resources=None):
+    def __init__(self, name, filters=None, is_root=False, resources=None):
         """Save attributes and set ``self`` as parent for the given resources.
 
         See the definition of the attributes on the class for more information about
@@ -247,19 +180,13 @@ class MultiResources(Resource, metaclass=ABCMeta):
         Arguments
         ---------
         name : string
-        entry_name : string, optional, default to ``name``
-        args : list, optional, default to ``None``
-        filters : list, optional, default to ``[]``
+        filters : list, optional
         is_root : boolean, optional, default to ``False``
         resources : list, optional, default to ``[]``
 
-        Notes:
-        -----
-        The only mandatory argument is ``name``.
-
         """
 
-        super().__init__(name, entry_name, args, filters, is_root)
+        super().__init__(name, filters, is_root)
 
         self.resources = resources or []
         for resource in self.resources:
@@ -302,12 +229,12 @@ class MultiResources(Resource, metaclass=ABCMeta):
             return (
                 '%(start)s\n'
                 '%(sub)s\n'
-                '%(indent)s</%(cls)s[%(entry_name)s]>'
+                '%(indent)s</%(cls)s[%(name)s]>'
             ) % {
                 'start': parent_repr[:-3] + '>',
                 'sub': '\n'.join(map(str, self.resources)),
                 'cls': self.__class__.__name__,
-                'entry_name': self.entry_name,
+                'name': self.name,
                 'indent': '  ' * self.get_level(),
             }
         else:
@@ -320,11 +247,11 @@ class List(MultiResources):
 
 
 class Object(MultiResources):
-    """A ``MultiResources`` subclass to represent a value as dict of sub-attributes."""
+    """A ``MultiResources`` subclass to represent a value as dict of sub-fields."""
     pass
 
 
-class Filter(WithArgsMixin):
+class Filter:
     """A filter is simply an attribute to call from a previous value, or a standalone function.
 
     This previous value could be a previous filter, or the main value got from the resource.
@@ -332,8 +259,9 @@ class Filter(WithArgsMixin):
     Attributes
     ----------
     name : string
-        The name of the filter is the name of the attribute to get form a value.
-    args : list or None
+        The name of the filter is the name of the attribute to get from a value (or the function
+        to use). Must be allowed by the ``Source`` object related to the value.
+    args : list, optional
         List of arguments to pass to the attribute if callable. If ``None``, the attribute is
         assumed not to be callable.
     parent : Resource
@@ -358,16 +286,15 @@ class Filter(WithArgsMixin):
         name : string
         args : list, optional, default to ``None``
 
-        Notes:
-        -----
-        The only mandatory argument is ``name``.
-
         """
-
-        super().__init__(args=args)
 
         self.name = name
         self.parent = None
+
+        self.args = args
+        if self.args:
+            for arg in self.args:
+                arg.set_parent(self)
 
     def __repr__(self):
         """String representation of a ``Filter`` instance.
@@ -399,6 +326,35 @@ class Filter(WithArgsMixin):
     def set_parent(self, parent):
         """Set the given parent as the parent resource."""
         self.parent = parent
+
+    def get_args_and_kwargs(self):
+        """Return a list and a dict usable as ``*args, **kwargs`` to pass to a callable."
+
+        If the entity is known to not accept arguments (``self.args`` is ``None``), then this
+        method returns ``None`` for both args and kwargs.
+
+        Returns
+        -------
+        tuple (list or None, dict or None)
+            A tuple with as first value, the list of positioned arguments (or ``None``), and as
+            second value the dict of named arguments (or ``None``)
+
+        """
+
+        args = None
+        kwargs = None
+
+        if self.args:
+            args = []
+            kwargs = {}
+            for arg in self.args:
+                if arg.is_named:
+                    kwargs[arg.arg] = arg.value
+                else:
+                    args.append(arg.value)
+
+        return args, kwargs
+
 
 
 class SliceFilter(Filter):
