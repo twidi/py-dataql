@@ -64,7 +64,7 @@ User.get('Elon Musk') {
 '''
 
 # Get the result
-result = registry.solve(
+result = registry.solve_resource(
     # Values that can be called at the very first level
     EntryPoints(registry, User=User),
     # The parser is a standalone part

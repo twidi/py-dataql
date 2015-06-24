@@ -292,51 +292,52 @@ class SourceNotFound(RegistryException, KeyError):
 
 
 class SolverNotFound(RegistryException):
-    """Exception raised when no solver was found to solve a resource.
+    """Exception raised when no solver was found to solve a resource or a filter.
 
     Attributes
     ----------
     registry : dataql.solvers.registry.Registry
         The ``Registry`` object used to solve a resource.
-    resource : dataql.resources.Resource
-        The ``Resource`` object for which there is no solvers.
+    obj : dataql.resources.Resource or dataql.resources.BaseFilter
+        The (subclass of) ``Resource`` or ``BaseFilter`` object for which there is no solvers.
 
     """
 
-    def __init__(self, registry, resource):
+    def __init__(self, registry, obj):
         self.registry = registry
-        self.resource = resource
+        self.obj = obj
         super().__init__(str(self))
 
     def __str__(self):
-        return 'No solvers found for this kind of resource: `%s`' % (
-            class_repr(self.resource),
+        return 'No solvers found for this kind of object: `%s`' % (
+            class_repr(self.obj),
         )
 
 
 class SolveFailure(RegistryException):
-    """Exception raised when no solver was able to solve a (resource, value) couple.
+    """Exception raised when no solver was able to solve a (resource/filter, value) couple.
 
-    This exception string exposes the name and class of the solver and the resource.
+    This exception string exposes the name and class of the solver and the resource or filter.
 
     Attributes
     ---------
     registry : dataql.solvers.registry.Registry
         The ``Registry`` object that raised this failed to solve.
-    resource : dataql.resources.Resource
-        The ``Resource`` object the registry was not able to solve.
+    obj : dataql.resources.Resource or dataql.resources.BaseFilter
+        The (subclass of) ``Resource`` or ``Filter`` object for which there is no solvers.
     value : ?
-        The value for which the registry was not able to solve the resource.
+        The value for which the registry was not able to solve the resource or filter.
 
     """
 
-    def __init__(self, registry, resource, value):
+    def __init__(self, registry, obj, value):
         self.registry = registry
-        self.resource = resource
+        self.obj = obj
         self.value = value
         super().__init__(str(self))
 
     def __str__(self):
-        return 'Unable to solve resource `%s`.' % (
-            '<%s[%s]>' % (self.resource.__class__.__name__, self.resource.name)
+        return 'Unable to solve `<%s%s>`.' % (
+            self.obj.__class__.__name__,
+            '[%s]' % self.obj.name if hasattr(self.obj, 'name') else ''
         )

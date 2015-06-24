@@ -1,12 +1,13 @@
-"""``base`` module of ``dataql.solvers``.
+"""``resources`` module of ``dataql.solvers``.
 
-This module holds the base solvers, one for simple attributes (``AttributeSolver``, one for
-objects (``ObjectSolver``), and one for lists (``ListSolver``).
+This module holds the base solvers for resources:
+- ``AttributeSolver`` for ``Field``
+- ``ObjectsSolver`` for ``Object``
+- ``ListSolver`` for ``List``
 
 Notes
 -----
-When we talk about "resources", we talk about instances of classes defined in ``dataql.resources``
-(or inherited classes of course)
+When we talk about "resources", we talk about subclasses of ``dataql.resources.Resource``.
 
 """
 
@@ -18,18 +19,23 @@ from dataql.solvers.exceptions import NotIterable
 
 
 class Solver(metaclass=ABCMeta):
-    """Base class for all solvers.
+    """Base class for all resource solvers.
 
-    The main entry point of a solver is the ``solve`` method, which must be defined
-    for every solver.
+    The main entry point of a solver is the ``solve`` method
 
     Attributes
     ----------
     solvable_resources : tuple (class attribute)
-        Holds the resource classes (from ``dataql.resources``) that can be solved by this solver.
+        Holds the resource classes (subclasses of ``dataql.resources.Resource``) that can be
+        solved by this solver.
         Must be defined in each sub-classes.
     registry : dataql.solvers.registry.Registry
         The registry that instantiated this solver.
+
+    Notes
+    -----
+    The ``solve`` method simply calls ``solve_value``, then ``cast`` with the result.
+    To change the behavior, simply override at least one of these two methods.
 
     """
 
@@ -80,9 +86,8 @@ class Solver(metaclass=ABCMeta):
             A value to solve in combination with the given resource. The first filter of the
             resource will be applied on this value (next filters on the result of the previous
             filter).
-        resource : Resource
-            An instance of a subclass of ``dataql.resources.Resource`` to solve with the given
-            value.
+        resource : dataql.resources.Resource
+            An instance of a subclass of ``Resource`` to solve with the given value.
 
         Returns
         -------
@@ -92,12 +97,12 @@ class Solver(metaclass=ABCMeta):
         ------
         CannotSolve
             If a solver accepts to solve a resource but cannot finally solve it.
-            Allows ``Registry.solve`` to use the next available solver.
+            Allows ``Registry.solve_resource`` to use the next available solver.
 
         Notes
         -----
         This method simply calls ``solve_value``, then ``cast`` with the result.
-        To change the behavior, simply override one of these two methods.
+        To change the behavior, simply override at least one of these two methods.
 
         """
 
@@ -113,9 +118,8 @@ class Solver(metaclass=ABCMeta):
             A value to solve in combination with the given resource. The first filter of the
             resource will be applied on this value (next filters on the result of the previous
             filter).
-        resource : Resource
-            An instance of a subclass of ``dataql.resources.Resource`` to solve with the given
-            value.
+        resource : dataql.resources.Resource
+            An instance of a subclass of ``Resource`` to solve with the given value.
 
         Returns
         -------
@@ -157,9 +161,7 @@ class Solver(metaclass=ABCMeta):
 
         # Apply filters one by one on the previous result.
         for filter_ in resource.filters:
-            args, kwargs = filter_.get_args_and_kwargs()
-            source = self.registry[result]
-            result = source.solve(result, filter_.name, args, kwargs)
+            result = self.registry.solve_filter(result, filter_)
 
         return result
 
@@ -361,7 +363,7 @@ class MultiResourcesBaseSolver(Solver, metaclass=ABCMeta):
 
         """
 
-        return {r.name: self.registry.solve(value, r) for r in resources}
+        return {r.name: self.registry.solve_resource(value, r) for r in resources}
 
 
 class ObjectSolver(MultiResourcesBaseSolver):
