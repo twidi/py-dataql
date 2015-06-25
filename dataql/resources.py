@@ -3,7 +3,7 @@
 It provides the different classes that are used to store a usable structure from a query
 parsed by a dataql parser.
 
-We have three resources. Each one has a name, and filters (``Filter`` class and subclasses).
+We have three resources. Each one has a name, and filters (subclasses of ``BaseFilter``).
 
 The three resources are:
 
@@ -15,9 +15,10 @@ The three resources are:
 The name is used as the entry-point for the output, and filters are used to retrieve data from
 the value (the first filter uses the main value, and each next filter use the result of the
 previous filter).
-A filter may be an attribute, that may be callable (which can have arguments if any
+A ``Filter`` may be an attribute, that may be callable (which can have arguments if any
 (``NamedArg`` and ``PosArg``), but it could also be a standalone function (taking the value
 as first argument, and then the other arguments)
+A ``SliceFilter`` allows to retrieve one or more entries of an iterable.
 When all filters are applied, the final value is casted (number, string... for ``Field``,
 dictionary for ``Object`` and list for ``List``).
 
@@ -51,10 +52,11 @@ class Resource(metaclass=ABCMeta):
     is_root : boolean
         ``True`` if it's the root resource, which have no parent. ``False`` otherwise.
     filters : list, optional
-        List of ``Filter``. Each filter will be applied to the result of the previous one (the
-        first filter being applied to the value passed to the solver)
-        If no filter was given on ``__init__``, a filter will be added with the name of
-        the resource (to fetch this name as an attribute during solving)
+        List of instances of subclasses of ``BaseFilter`` .
+        Each filter will be applied to the result of the previous one (the first filter being
+        applied to the value passed to the solver) If no filter was given on ``__init__``, a
+        filter will be added with the name of the resource (to fetch this name as an attribute
+        during solving)
     parent : Resource, or None
         Back reference to the parent resource. ``None`` if it's the root resource.
 
@@ -251,7 +253,32 @@ class Object(MultiResources):
     pass
 
 
-class Filter:
+class BaseFilter(metaclass=ABCMeta):
+    """A filter is "something" to apply to a value to get another value.
+
+    This base class is to be used to all filters.
+
+    Attributes
+    ----------
+    parent : Resource
+        The ``Resource`` subclass instance having this filter.
+
+    """
+
+    __slots__ = (
+        'parent',
+    )
+
+    def __init__(self):
+        """Set the ``parent`` attribute to ``None``."""
+        self.parent = None
+
+    def set_parent(self, parent):
+        """Set the given parent as the parent resource."""
+        self.parent = parent
+
+
+class Filter(BaseFilter):
     """A filter is simply an attribute to call from a previous value, or a standalone function.
 
     This previous value could be a previous filter, or the main value got from the resource.
@@ -288,8 +315,9 @@ class Filter:
 
         """
 
+        super().__init__()
+
         self.name = name
-        self.parent = None
 
         self.args = args
         if self.args:
@@ -323,10 +351,6 @@ class Filter:
             'args': ', '.join(map(str, self.args)) if self.args else '',
         }
 
-    def set_parent(self, parent):
-        """Set the given parent as the parent resource."""
-        self.parent = parent
-
     def get_args_and_kwargs(self):
         """Return a list and a dict usable as ``*args, **kwargs`` to pass to a callable."
 
@@ -356,16 +380,13 @@ class Filter:
         return args, kwargs
 
 
-
-class SliceFilter(Filter):
-    """A slice used as a filter to get one or many entries from an iterable..
+class SliceFilter(BaseFilter):
+    """A slice used as a filter to get one or many entries from an iterable.
 
     Only one of the ``slice`` and ``index`` attributes are defined for a ``SliceFilter`` object.
 
     Attributes
     ----------
-    name : string
-        The name of this filter will always be "slice" (name is required from the parent class)
     slice : slice
         A ``slice`` object with its attributes: ``start``, ``stop``, ``step``.
     index : int
@@ -376,7 +397,6 @@ class SliceFilter(Filter):
     """
 
     __slots__ = (
-        'name',
         'slice',
         'index',
         'parent'
@@ -387,16 +407,13 @@ class SliceFilter(Filter):
 
         Arguments
         ---------
-
-        Notes:
-        -----
-        A forced name, ``slice`` is passed to the parent ``__init__`` method.
         slice_info : slice or number
             If a ``slice``, value will be saved in ``self.slice``, otherwise in ``self.index``.
 
         """
 
-        super().__init__('slice')
+        super().__init__()
+
         if isinstance(slice_info, slice):
             self.slice, self.index = slice_info, None
         else:

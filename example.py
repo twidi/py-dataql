@@ -59,7 +59,8 @@ User.get('Elon Musk') {
     companies[
         name,
         date:created_year,
-    ]
+    ],
+    first_company:companies.0.name,
 }
 '''
 
@@ -85,5 +86,6 @@ assert result == {
             'name': 'Space X',
             'date': 2002
         }
-    ]
+    ],
+    'first_company': 'Paypal',
 }

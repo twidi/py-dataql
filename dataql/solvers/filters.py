@@ -1,17 +1,18 @@
 """``resources`` module of ``dataql.solvers``.
 
-This module holds the base solvers for filters. Currently only the ``FilterSolver`` is
-available..
+This module holds the base solvers for filters:
+- ``FilterSolver`` for ``Filter``
+- ``SliceSolver`` for ``SlicingFilter``
 
 Notes
 -----
-When we talk about "filters", we talk about ``dataql.resources.Filter`` and subclasses.
+When we talk about "filters", we talk about subclasses of ``dataql.resources.BaseFilter``.
 
 """
 
 from abc import abstractmethod, ABCMeta
 
-from dataql.resources import Filter
+from dataql.resources import Filter, SliceFilter
 
 
 class Solver(metaclass=ABCMeta):
@@ -23,7 +24,7 @@ class Solver(metaclass=ABCMeta):
     Attributes
     ----------
     solvable_filters : tuple (class attribute)
-        Holds the filter classes (``dataql.resources.Filter`` and its subclasses) that can be
+        Holds the filter classes (subclasses of ``dataql.resources.BaseFilter``) that can be
         solved by this solver.
         Must be defined in each sub-classes.
     registry : dataql.solvers.registry.Registry
@@ -77,8 +78,8 @@ class Solver(metaclass=ABCMeta):
         ---------
         value : ?
             A value to solve in combination with the given filter.
-        filter_ : dataql.resource.Filter
-            An instance of ``Filter`` or a subclass to solve with the given value.
+        filter_ : dataql.resource.BaseFilter
+            An instance of a subclass of ``BaseFilter`` to solve with the given value.
 
         Returns
         -------
@@ -104,8 +105,8 @@ class Solver(metaclass=ABCMeta):
 
         Arguments
         ---------
-        filter_ : dataql.resources.Filter or subclass
-            The ``Filter`` to check if it is solvable by the current solver class
+        filter_ : subclass of dataql.resources.BaseFilter
+            The subclass or ``BaseFilter`` to check if it is solvable by the current solver class.
 
         Returns
         -------
@@ -119,7 +120,7 @@ class Solver(metaclass=ABCMeta):
         (<class 'dataql.resources.Filter'>,)
         >>> FilterSolver.can_solve(Filter(name='foo'))
         True
-        >>> FilterSolver.can_solve(None)
+        >>> SliceSolver.can_solve(Filter(name='foo'))
         False
 
         """
@@ -142,7 +143,7 @@ class FilterSolver(Solver):
     (<class 'dataql.resources.Filter'>,)
     >>> FilterSolver.can_solve(Filter(name='foo'))
     True
-    >>> FilterSolver.can_solve(None)
+    >>> FilterSolver.can_solve(SliceFilter(slice(1, 2, 3)))
     False
 
     """
@@ -157,7 +158,7 @@ class FilterSolver(Solver):
         value : ?
             A value to solve in combination with the given filter.
         filter_ : dataql.resource.Filter
-            An instance of ``Filter`` or a subclass to solve with the given value.
+            An instance of ``Filter`` to solve with the given value.
 
         Returns
         -------
@@ -165,8 +166,70 @@ class FilterSolver(Solver):
         result of a call to a standalone function taking the value as first argument.
         This method returns this attribute or result.
 
+        Example
+        -------
+
+        >>> from dataql.solvers.registry import Registry
+        >>> registry = Registry()
+        >>> from datetime import date
+        >>> registry.register(date, ['day', 'strftime'])
+        >>> solver = FilterSolver(registry)
+        >>> solver.solve(date(2015, 6, 1), Filter(name='day'))
+        1
+        >>> from dataql.resources import PosArg
+        >>> solver.solve(date(2015, 6, 1), Filter(name='strftime', args=[PosArg('%F')]))
+        '2015-06-01'
+
         """
 
         args, kwargs = filter_.get_args_and_kwargs()
         source = self.registry[value]
         return source.solve(value, filter_.name, args, kwargs)
+
+
+class SliceSolver(Solver):
+    """Solver aimed to get a slice or an entry of an iterable value.
+
+    This solver can only handle ``dataql.resources.SliceFilter`` filters.
+
+    Example
+    -------
+
+    >>> SliceSolver.solvable_filters
+    (<class 'dataql.resources.SliceFilter'>,)
+    >>> SliceSolver.can_solve(SliceFilter(slice(1, 2, 3)))
+    True
+    >>> SliceSolver.can_solve(Filter(name='foo'))
+    False
+
+    """
+
+    solvable_filters = (SliceFilter, )
+
+    def solve(self, value, filter_):
+        """Get slice or entry defined by an index from the given value.
+
+        Arguments
+        ---------
+        value : ?
+            A value to solve in combination with the given filter.
+        filter_ : dataql.resource.SliceFilter
+            An instance of ``SliceFilter``to solve with the given value.
+
+        Example
+        -------
+
+        >>> from dataql.solvers.registry import Registry
+        >>> registry = Registry()
+        >>> solver = SliceSolver(registry)
+        >>> solver.solve([1, 2, 3], SliceFilter(1))
+        2
+        >>> solver.solve([1, 2, 3], SliceFilter(slice(1, None, None)))
+        [2, 3]
+        >>> solver.solve([1, 2, 3], SliceFilter(slice(0, 2, 2)))
+        [1]
+
+
+        """
+
+        return value[filter_.slice or filter_.index]
