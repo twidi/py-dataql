@@ -58,7 +58,7 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
         # Now with a parser that will try to get a better error message
         >>> DataQLParser(query) # doctest: +ELLIPSIS
         Traceback (most recent call last):
-        dataql...ParserError:...line 1, column 9...text begins with: "::baz}"
+        dataql...ParserError:...line 1, column 10...text begins with: ":baz}"
 
 
         """
@@ -264,7 +264,7 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
 
         return children
 
-    @rule('RESOURCE NEXT_RESOURCES COM?')
+    @rule('NAMED_RESOURCE NEXT_RESOURCES COM?')
     def visit_content(self, _, children):
         """The content of a resource, composed of a list of resources.
 
