@@ -14,8 +14,11 @@ Example
 >>> registry.register(date, ['strftime'])
 >>> entry_points = EntryPoints(registry, today=date(2015, 6, 1))
 >>> from dataql.resources import *
->>> resource = Field('today', filters=[Filter('strftime', args=[PosArg('%F')])])
->>> registry.solve(entry_points, resource)
+>>> resource = Field('today', filters=[
+...     Filter('today'),
+...     Filter('strftime', args=[PosArg('%F')]),
+... ])
+>>> registry.solve_resource(entry_points, resource)
 '2015-06-01'
 
 """
@@ -24,7 +27,8 @@ from abc import ABCMeta
 from collections import Mapping
 from inspect import isclass, isfunction, ismethod
 
-from dataql.solvers.base import AttributeSolver, ObjectSolver, ListSolver
+from dataql.solvers.filters import FilterSolver, SliceSolver
+from dataql.solvers.resources import AttributeSolver, ObjectSolver, ListSolver
 from dataql.solvers.exceptions import (
     AlreadyRegistered,
     AttributeNotFound,
@@ -546,9 +550,9 @@ class BaseEntryPoints(metaclass=ABCMeta):
 
 
 def EntryPoints(registry, **kwargs):
-    """Returns an instance of an object to use as entry point when calling ``registry.solve``.
+    """Returns an object to use as entry point when calling ``registry.solve_resource``.
 
-    When calling ``registry.solve`` on a "root" resource, we don't have any value.
+    When calling ``registry.solve_resource`` on a "root" resource, we don't have any value.
     This function will create a object to use as a first value and is used to specify which
     entry points are allowed at the first level of a dataql query.
 
@@ -560,15 +564,17 @@ def EntryPoints(registry, **kwargs):
     >>> registry.register(date, ['strftime'])
     >>> entry_points = EntryPoints(registry, today=date(2015, 6, 1))
     >>> from dataql.resources import *
-    >>> resource = Field('today', filters=[Filter('strftime', args=[PosArg('%F')])])
-    >>> registry.solve(entry_points, resource)
+    >>> resource = Field('today', filters=[
+    ...     Filter('today'),
+    ...     Filter('strftime', args=[PosArg('%F')]),
+    ... ])
+    >>> registry.solve_resource(entry_points, resource)
     '2015-06-01'
 
     Notes
     -----
     The name of this function is intentionally made to resemble a class, as it returns an instance
     of a class named ``EntryPoints``.
-
 
     """
 
@@ -789,15 +795,29 @@ class Registry(Mapping):
     A registry is a dict-like object so it can be iterated to get the list of sources, or used
     to get the ``Source`` instance from the source class.
 
-    Then, when sources are registered, it is possible to use ``solve`` to solve a (value, resource)
-    couple: one solver from the ``solvers`` class attribute will be used to find the solution.
+    Then, when sources are registered, it is possible to use ``solve_resource`` to solve a
+    (value, resource) couple: one (at least) solver from the ``resource_solver_classes`` class
+    attribute will be used to find the solution, and for each filter in a resource, one solver
+    (at least) from the ``filter_solver_classes`` class attribute will be used to get a value.
 
     Attributes
     ----------
-    solvers : tuple (class attribute)
-        List of solver classes to use for solving a (value, resource) couple. The order is
-        important because the first one that returns ``True`` to a call to its ``can_solve``
-        method will be used.
+    resource_solver_classes : tuple (class attribute)
+        List of resource solver classes to use for solving a (value, resource) couple. The order
+        is important because the first one that returns ``True`` to a call to its ``can_solve``
+        class method will be used (but if it then raise a ``CannotSolve`` exception during it
+        solve, the next solver will be used).
+    filter_solver_classes : tuple (class attribute)
+        List of filter solver classes to use for solving a (value, filter) couple. The order
+        is important because the first one that returns ``True`` to a call to its ``can_solve``
+        class method will be used (but if it then raise a ``CannotSolve`` exception during it
+        solve, the next solver will be used).
+    _resource_solvers_cache : dict
+        To cache instances of resource solver classes. Each solver class only take the registry as
+        argument, so one instance can be used for every value to solve.
+    _filter_solvers_cache : dict
+        To cache instances of filter solver classes. Each solver class only take the registry as
+        argument, so one instance can be used for every value to solve.
     Source : class (class attribute)
         The class to use as for ``Source`` (to store each registered source). Default to
         ``dataql.solvers.registry.Source``.
@@ -814,19 +834,22 @@ class Registry(Mapping):
     >>> registry[date]
     <Source 'datetime.date'>
     >>> from dataql.resources import Field
-    >>> registry.solve(date(2015, 6, 1), Field('day'))
+    >>> registry.solve_resource(date(2015, 6, 1), Field('day'))
     1
 
     """
 
-    solvers = (AttributeSolver, ObjectSolver, ListSolver)
+    resource_solver_classes = (AttributeSolver, ObjectSolver, ListSolver)
+    filter_solver_classes = (FilterSolver, SliceSolver)
 
     Source = Source
 
     def __init__(self):
-        """Init the sources as an empty dictionary."""
+        """Init the attributes."""
 
         self.sources = {}
+        self._resource_solvers_cache = {}
+        self._filter_solvers_cache = {}
 
     def __repr__(self):
         """String representation of a ``Registry`` instance.
@@ -1044,19 +1067,19 @@ class Registry(Mapping):
 
         return len(self.sources)
 
-    def get_solvers_classes(self, resource):
-        """Returns the solver classes that can solve the given resource.
+    def get_resource_solvers(self, resource):
+        """Returns the resource solvers that can solve the given resource.
 
         Arguments
         ---------
-        resource : Resource
-            An instance of a subclass of ``dataql.resources.Resource`` for which we want
-            to get the solver classes that can solve it.
+        resource : dataql.resources.Resource
+            An instance of a subclass of ``Resource`` for which we want to get the solver
+            classes that can solve it.
 
         Returns
         -------
         list
-            The list of solver classes that can solve the given resource.
+            The list of resource solvers instances that can solve the given resource.
 
         Raises
         ------
@@ -1068,35 +1091,95 @@ class Registry(Mapping):
 
         >>> from dataql.resources import Field, List
         >>> registry = Registry()
-        >>> registry.get_solvers_classes(Field(name='foo'))
-        [<class 'dataql.solvers.base.AttributeSolver'>]
-        >>> registry.get_solvers_classes(List(name='foo'))
-        [<class 'dataql.solvers.base.ListSolver'>]
-        >>> registry.get_solvers_classes(None) # doctest: +ELLIPSIS
+        >>> registry.get_resource_solvers(Field(name='foo'))
+        [<AttributeSolver>]
+        >>> registry.get_resource_solvers(List(name='foo'))
+        [<ListSolver>]
+        >>> registry.get_resource_solvers(None) # doctest: +ELLIPSIS
         Traceback (most recent call last):
-        dataql.solvers.exceptions.SolverNotFound: No solvers found for this kind of resource:...
+        dataql.solvers.exceptions.SolverNotFound: No solvers found for this kind of object:...
 
         """
 
-        solvers = [s for s in self.solvers if s.can_solve(resource)]
-        if solvers:
+        solvers_classes = [s for s in self.resource_solver_classes if s.can_solve(resource)]
+
+        if solvers_classes:
+            solvers = []
+
+            for solver_class in solvers_classes:
+
+                # Put the solver instance in the cache if not cached yet.
+                if solver_class not in self._resource_solvers_cache:
+                    self._resource_solvers_cache[solver_class] = solver_class(self)
+
+                solvers.append(self._resource_solvers_cache[solver_class])
+
             return solvers
+
         raise SolverNotFound(self, resource)
 
-    def solve(self, value, resource):
+    def get_filter_solvers(self, filter_):
+        """Returns the filter solvers that can solve the given filter.
+
+        Arguments
+        ---------
+        filter : dataql.resources.BaseFilter
+            An instance of the a subclass of ``BaseFilter`` for which we want to get the solver
+            classes that can solve it.
+
+        Returns
+        -------
+        list
+            The list of filter solvers instances that can solve the given resource.
+
+        Raises
+        ------
+        dataql.solvers.exceptions.SolverNotFound
+            When no solver is able to solve the given filter.
+
+        Example
+        -------
+
+        >>> from dataql.resources import Filter
+        >>> registry = Registry()
+        >>> registry.get_filter_solvers(Filter(name='foo'))
+        [<FilterSolver>]
+        >>> registry.get_filter_solvers(None) # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+        dataql.solvers.exceptions.SolverNotFound: No solvers found for this kind of object:...
+
+        """
+
+        solvers_classes = [s for s in self.filter_solver_classes if s.can_solve(filter_)]
+
+        if solvers_classes:
+            solvers = []
+
+            for solver_class in solvers_classes:
+
+                # Put the solver instance in the cache if not cached yet.
+                if solver_class not in self._filter_solvers_cache:
+                    self._filter_solvers_cache[solver_class] = solver_class(self)
+
+                solvers.append(self._filter_solvers_cache[solver_class])
+
+            return solvers
+
+        raise SolverNotFound(self, filter_)
+
+    def solve_resource(self, value, resource):
         """Solve the given resource for the given value.
 
-        The solving is done by the first solver class that returns ``True`` when calling its
-         ``can_solve`` method for the given resource, and that doesn't raise a ``CannotSolve``
+        The solving is done by the first resource solver class that returns ``True`` when calling
+        its ``can_solve`` method for the given resource, and that doesn't raise a ``CannotSolve``
          exception.
 
         Arguments
         ---------
         value : ?
             A value to be solved with the given resource.
-        resource : Resource
-            An instance of a subclass of ``dataql.resources.Resource`` to be solved with the
-            given value..
+        resource : dataql.resources.Resource
+            An instance of a subclass of ``Resource`` to be solved with the given value.
 
         Returns
         -------
@@ -1107,50 +1190,121 @@ class Registry(Mapping):
         dataql.solvers.exceptions.SolveFailure
             If no solvers were able to solve the resource. This happen if a solver says that
             it can solve a resource (by returning ``True`` when calling its ``can_solve`` method,
-            but raises a ``CannotSolve`` exception during solving.
+            but raises a ``CannotSolve`` exception during solving).
 
         Example
         -------
+
         >>> from datetime import date
         >>> registry = Registry()
-        >>> registry.register(date, ['day', 'month', 'year'])
-        >>> from dataql.resources import Field, Object, List
-        >>> registry.solve(date(2015, 6, 1), Field('day'))
+        >>> registry.register(date, ['day', 'month', 'year', 'strftime'])
+        >>> from dataql.resources import Field, Filter, List, Object, PosArg, SliceFilter
+        >>> registry.solve_resource(date(2015, 6, 1), Field('day'))
         1
 
         # Create an object from which we'll want an object (``date``) and a list (``dates``)
         >>> obj = EntryPoints(registry,
         ...     date = date(2015, 6, 1),
-        ...     dates = [date(2015, 6, 1), date(2015, 6, 2)],
+        ...     dates = [date(2015, 6, 1), date(2015, 6, 2), date(2015, 6, 3)],
         ... )
 
-        >>> d = registry.solve(
+        >>> d = registry.solve_resource(
         ...     obj,
+        ...     # Omit single filter as it's auto-created with the name of the resource.
         ...     Object('date', resources=[Field('day'), Field('month'), Field('year')])
         ... )
         >>> [(k, d[k]) for k in sorted(d)]
         [('day', 1), ('month', 6), ('year', 2015)]
 
-        >>> ds = list(registry.solve(
+        >>> ds = list(registry.solve_resource(
         ...     obj,
+        ...     # Omit single filter as it's auto-created with the name of the resource.
         ...     List('dates', resources=[Field('day'), Field('month'), Field('year')])
         ... ))
-        >>> [[(k, d[k]) for k in sorted(d)] for d in ds]
+        >>> [[(k, d[k]) for k in sorted(d)] for d in ds][:2]
         [[('day', 1), ('month', 6), ('year', 2015)], [('day', 2), ('month', 6), ('year', 2015)]]
+
+        >>> registry.solve_resource(
+        ...     obj,
+        ...     Field('dates', filters=[Filter('dates'), SliceFilter(1)])
+        ... )
+        '2015-06-02'
+
+        # No way for now to retrieve a list that is not a list of dict
+        >>> registry.solve_resource(
+        ...     obj,
+        ...     List('dates',
+        ...         filters=[Filter('dates'), SliceFilter(slice(1, None, None))],
+        ...         resources=[Field('date', filters=[Filter('strftime', args=[PosArg('%F')])])]
+        ...     )
+        ... )
+        [{'date': '2015-06-02'}, {'date': '2015-06-03'}]
 
         # Example of ``SolveFailure`` exception.
         >>> from dataql.solvers.exceptions import CannotSolve
         >>> raise SolveFailure(registry, Field('fromtimestamp'), date)
         Traceback (most recent call last):
-        dataql.solvers.exceptions.SolveFailure: Unable to solve resource `<Field[fromtimestamp]>`.
+        dataql.solvers.exceptions.SolveFailure: Unable to solve `<Field[fromtimestamp]>`.
 
         """
 
-        solvers_classes = self.get_solvers_classes(resource)
-        for solver_class in solvers_classes:
+        for solver in self.get_resource_solvers(resource):
             try:
-                solver = solver_class(self, value)
-                return solver.solve_resource(value, resource)
+                return solver.solve(value, resource)
             except CannotSolve:
                 continue
+
         raise SolveFailure(self, resource, value)
+
+    def solve_filter(self, value, filter_):
+        """Solve the given filter for the given value.
+
+        The solving is done by the first filter solver class that returns ``True`` when calling
+        its ``can_solve`` method for the given filter, and that doesn't raise a ``CannotSolve``
+         exception.
+
+        Arguments
+        ---------
+        value : ?
+            A value to be solved with the given filter.
+        filter_ : dataql.resources.BaseFilter
+            An instance of a subclass of ``dataql.resources.BaseFilter`` to be solved
+            with the given value.
+
+        Returns
+        -------
+        The solved result.
+
+        Raises
+        ------
+        dataql.solvers.exceptions.SolveFailure
+            If no solvers were able to solve the filter. This happen if a solver says that
+            it can solve a filter (by returning ``True`` when calling its ``can_solve`` method,
+            but raises a ``CannotSolve`` exception during solving).
+
+        Example
+        -------
+        >>> from datetime import date
+        >>> registry = Registry()
+        >>> registry.register(date, ['day', 'strftime'])
+        >>> from dataql.resources import Filter, PosArg
+        >>> registry.solve_filter(date(2015, 6, 1), Filter('day'))
+        1
+        >>> registry.solve_filter(date(2015, 6, 1), Filter('strftime', args=[PosArg('%F')]))
+        '2015-06-01'
+
+        # Example of ``SolveFailure`` exception.
+        >>> from dataql.solvers.exceptions import CannotSolve
+        >>> raise SolveFailure(registry, Filter('fromtimestamp'), date)
+        Traceback (most recent call last):
+        dataql.solvers.exceptions.SolveFailure: Unable to solve `<Filter[fromtimestamp]>`.
+
+        """
+
+        for solver in self.get_filter_solvers(filter_):
+            try:
+                return solver.solve(value, filter_)
+            except CannotSolve:
+                continue
+
+        raise SolveFailure(self, filter_, value)

@@ -148,6 +148,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         - VALUE       => A value (string, number, null, false or true)
         - STR         => A string
         - NB          => A number (int, float, with or without scientific notation)
+        - OPTIONAL_NB => An optional number (see "NB"). None if not set.
         - NULL        => A ``None`` identifier ("null", "nil", "none", case insensitive)
         - FALSE       => A ``False`` identifier ("false" case insensitive)
         - TRUE        => A ``True`` identifier ("true" case insensitive)
@@ -171,6 +172,8 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         The class to use as a ``List`` resource. Default to ``dataql.resources.List``.
     Filter : class (class attribute)
         The class to use as a ``Filter``. Default to ``dataql.resources.Filter``.
+    SliceFilter : class (class attribute)
+        The class to use as a ``SliceFilter``. Default to ``dataql.resources.SliceFilter``.
     NamedArg : class (class attribute)
         The class to use as a ``NamedArg`` (named argument). Default to
         ``dataql.resources.NamedArg``.
@@ -224,6 +227,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
     List = resources.List
     Object = resources.Object
     Filter = resources.Filter
+    SliceFilter = resources.SliceFilter
     NamedArg = resources.NamedArg
     PosArg = resources.PosArg
 
@@ -405,7 +409,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         Arguments
         ---------
         node : parsimonious.nodes.Node.
-        children : list, unused
+        _ (children) : list, unused
 
         Result
         ------
@@ -450,7 +454,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         Arguments
         ---------
         node : parsimonious.nodes.Node.
-        children : list, unused
+        _ (children) : list, unused
 
         Result
         ------
@@ -479,6 +483,31 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         """
 
         return self.convert_nb(node.text)
+
+    @rule('NB?')
+    def visit_optional_nb(self, _, children):
+        """Return a int of float (see the NB rule) or None.
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list, unused
+
+        Result
+        ------
+        int or float or None
+
+        Example
+        -------
+
+        >>> BaseParser('', default_rule='OPTIONAL_NB').data
+
+        >>> BaseParser('1', default_rule='OPTIONAL_NB').data
+        1
+
+        """
+
+        return children[0] if children else None
 
     @rule('~"(?:null|nil|none)"i')
     def visit_null(self, *_):

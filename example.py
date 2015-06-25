@@ -59,12 +59,13 @@ User.get('Elon Musk') {
     companies[
         name,
         date:created_year,
-    ]
+    ],
+    first_company:companies.0.name,
 }
 '''
 
 # Get the result
-result = registry.solve(
+result = registry.solve_resource(
     # Values that can be called at the very first level
     EntryPoints(registry, User=User),
     # The parser is a standalone part
@@ -85,5 +86,6 @@ assert result == {
             'name': 'Space X',
             'date': 2002
         }
-    ]
+    ],
+    'first_company': 'Paypal',
 }

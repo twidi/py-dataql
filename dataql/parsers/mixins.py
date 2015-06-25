@@ -4,6 +4,7 @@ It provides some mixin to ease the creation of complex parsers:
 - NamedArgsParserMixin : manage named arguments
 - UnnamedArgsParserMixin : manage unnamed arguments
 - ArgsParserMixin : manage arguments (unnamed and named ones)
+- SliceParserMixin : manage slicing of iterables (think ``[start:stop:step]`` or ``[index]``)
 - FiltersParserMixin : manage filters (many successive filters, each filter is an identifier with
                        or without arguments)
 
@@ -22,6 +23,12 @@ class NamedArgsParserMixin(BaseParser, metaclass=ABCMeta):
     a string, or a null, false or true value.
 
     To use it, add this mixin to the class bases, and use ``NAMED_ARGS`` in your rule(s).
+
+    Results
+    -------
+    list of NamedArg
+        The output of the ``visit_named_args`` is a list of ``NamedArg`` objects.
+        The list may be empty.
 
     Example
     -------
@@ -192,6 +199,12 @@ class UnnamedArgsParserMixin(BaseParser, metaclass=ABCMeta):
 
     To use it, add this mixin to the class bases, and use ``UNNAMED_ARGS`` in your rule(s).
 
+    Results
+    -------
+    list of PosArg
+        The output of the ``visit_unnamed_args`` is a list of ``PosArg`` objects.
+        The list may be empty.
+
     Example
     -------
 
@@ -351,6 +364,12 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser,
     """Parser mixin that provides rules to manage arguments in parentheses.
 
     To use it, add this mixin to the class bases, and use``OPTIONAL_ARGS`` in your rule(s).
+
+    Results
+    -------
+    list of subclasses of Arg
+        The output of the ``visit_optional_args`` is a list of subclasses of ``PosArg`` then
+        ``NamedArg`` objects. The list may be empty.
 
     Example
     -------
@@ -512,10 +531,218 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser,
         return children[0] + children[2]
 
 
+class SliceParserMixin(BaseParser, metaclass=ABCMeta):
+    """Parser mixin that manage a list slicing, ie ``[x:y:z]`` of just an item like ``[1]``.
+
+    To use it, add this mixin to the class bases, and use``SLICE`` in your rule(s).
+
+    Results
+    -------
+    slice or number
+        The output of the ``visit_slice`` method is a ``slice`` python object when asking
+        for a slice of a list, of a single number when asking for a single entry.
+
+    Example
+    -------
+
+    >>> SliceParserMixin('[1]', default_rule='SLICE').data
+    1
+    >>> SliceParserMixin('[:]', default_rule='SLICE').data
+    slice(None, None, None)
+    >>> SliceParserMixin('[1:]', default_rule='SLICE').data
+    slice(1, None, None)
+    >>> SliceParserMixin('[1:2:3]', default_rule='SLICE').data
+    slice(1, 2, 3)
+
+    """
+
+    default_rule = 'SLICE'
+
+    @rule('BRA_O SLICE_CONTENT BRA_C')
+    def visit_slice(self, _, children):
+        """A slice or number contained in brackets (``[]``)
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: for ``BRA_O`` (opening bracket): ``None``.
+            - 1: slice or number.
+            - 2: for ``BRA_C`` (closing bracket): ``None``.
+
+        Returns
+        -------
+        slice or number
+            The slice or number got from ``children[1]``
+
+        Example
+        -------
+
+        >>> SliceParserMixin('[1]', default_rule='SLICE').data
+        1
+        >>> SliceParserMixin('[:]', default_rule='SLICE').data
+        slice(None, None, None)
+        >>> SliceParserMixin('[1:]', default_rule='SLICE').data
+        slice(1, None, None)
+        >>> SliceParserMixin('[1:2:3]', default_rule='SLICE').data
+        slice(1, 2, 3)
+
+        """
+
+        return children[1]
+
+    @rule('FULL_SLICE / NB')
+    def visit_slice_content(self, _, children):
+        """The content of a slice (to be in brackets)
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: slice or number
+
+        Returns
+        -------
+        slice or number
+            The slice or number got from ``children[1]``
+
+        Example
+        -------
+
+        >>> SliceParserMixin('1', default_rule='SLICE_CONTENT').data
+        1
+        >>> SliceParserMixin(':', default_rule='SLICE_CONTENT').data
+        slice(None, None, None)
+        >>> SliceParserMixin('1:', default_rule='SLICE_CONTENT').data
+        slice(1, None, None)
+        >>> SliceParserMixin('1:2:3', default_rule='SLICE_CONTENT').data
+        slice(1, 2, 3)
+
+        """
+
+        return children[0]
+
+    @rule('OPTIONAL_NB WS COL WS OPTIONAL_NB WS OPTIONAL_SLICE_STEP')
+    def visit_full_slice(self, _, children):
+        """The content of a slice (to be in brackets) with at least one colon.
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: an optional number to use as the ``start`` attribute of a ``slice`` object.
+            - 1: for ``WS``, optional white space: ``None``
+            - 2: for ``COL``, the colon character: ``None``
+            - 3: for ``WS``, optional white space: ``None``
+            - 4: an optional number to use as the ``stop`` attribute of a ``slice`` object.
+            - 5: for ``WS``, optional white space: ``None``
+            - 6: an optional number to use as the ``step`` attribute of a ``slice`` object,
+                 got from the ``OPTIONAL_SLICE_STEP`` rule (which expects a colon and/or a number)
+
+        Returns
+        -------
+        slice
+            A ``slice`` object with ``start``, ``stop`` and ``step`` arguments set from children.
+
+        Example
+        -------
+
+        >>> SliceParserMixin(':', default_rule='FULL_SLICE').data
+        slice(None, None, None)
+        >>> SliceParserMixin('::', default_rule='FULL_SLICE').data
+        slice(None, None, None)
+        >>> SliceParserMixin('1:', default_rule='FULL_SLICE').data
+        slice(1, None, None)
+        >>> SliceParserMixin(':2', default_rule='FULL_SLICE').data
+        slice(None, 2, None)
+        >>> SliceParserMixin('1:2', default_rule='FULL_SLICE').data
+        slice(1, 2, None)
+        >>> SliceParserMixin('::3', default_rule='FULL_SLICE').data
+        slice(None, None, 3)
+        >>> SliceParserMixin(':2:3', default_rule='FULL_SLICE').data
+        slice(None, 2, 3)
+        >>> SliceParserMixin('1::3', default_rule='FULL_SLICE').data
+        slice(1, None, 3)
+        >>> SliceParserMixin('1:2:3', default_rule='FULL_SLICE').data
+        slice(1, 2, 3)
+
+        """
+
+        return slice(children[0], children[4], children[6])
+
+    @rule('SLICE_STEP?')
+    def visit_optional_slice_step(self, _, children):
+        """The optional slice step for a slice (to be in bracket).
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: an optional number to use as the ``step`` attribute of a ``slice`` object,
+                 got from the ``SLICE_STEP`` rule (which expects a colon and/or a number)
+
+        Returns
+        -------
+        number or None
+            The number to use as the ``step`` attribute of a ``slice`` object.
+
+        Example
+        -------
+
+        >>> SliceParserMixin('', default_rule='OPTIONAL_SLICE_STEP').data
+
+        >>> SliceParserMixin(':', default_rule='OPTIONAL_SLICE_STEP').data
+
+        >>> SliceParserMixin(':1', default_rule='OPTIONAL_SLICE_STEP').data
+        1
+
+        """
+
+        return children[0] if children else None
+
+    @rule('COL WS OPTIONAL_NB')
+    def visit_slice_step(self, _, children):
+        """The optional slice step for a slice (to be in bracket).
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: for ``COL``, the colon character: ``None``
+            - 1: for ``WS``, optional white space: ``None``
+            - 2: an optional number to use as the ``step`` attribute of a ``slice`` object
+
+        Returns
+        -------
+        number or None
+            The number to use as the ``step`` attribute of a ``slice`` object.
+
+        Example
+        -------
+
+        >>> SliceParserMixin(':', default_rule='SLICE_STEP').data
+
+        >>> SliceParserMixin(':1', default_rule='SLICE_STEP').data
+        1
+
+        >>> SliceParserMixin(': 2', default_rule='SLICE_STEP').data
+        2
+
+        """
+
+        return children[2] if len(children) > 2 else None
+
+
 class FiltersParserMixin(ArgsParserMixin, BaseParser, metaclass=ABCMeta):
     """Parser mixin that provides rules to manage arguments in parentheses.
 
-    To use it, add this mixin to the class bases, and use``OPTIONAL_ARGS`` in your rule(s).
+    To use it, add this mixin to the class bases, and use``FILTERS`` in your rule(s).
+
+    Results
+    -------
+    list of Filter
+        The output of the ``visit_filters`` is a list of ``Filter`` objects.
+        The list may be empty.
 
     Example
     -------
@@ -543,7 +770,7 @@ class FiltersParserMixin(ArgsParserMixin, BaseParser, metaclass=ABCMeta):
 
     default_rule = 'FILTERS'
 
-    @rule('FILTER NEXT_FILTERS')
+    @rule('FIRST_FILTER NEXT_FILTERS')
     def visit_filters(self, _, children):
         """A succession of filters.
 
@@ -572,6 +799,31 @@ class FiltersParserMixin(ArgsParserMixin, BaseParser, metaclass=ABCMeta):
         """
 
         return [children[0]] + (children[1] or [])
+
+    @rule('FILTER')
+    def visit_first_filter(self, _, children):
+        """The first filter, so not preceded by a dot.
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: A``Filter`` resource.
+
+        Returns
+        -------
+        .resources.Filter
+            An instance of ``Filter``.
+
+        Example
+        -------
+
+        >>> FiltersParserMixin('foo', default_rule='FIRST_FILTER').data
+        .foo
+
+        """
+
+        return children[0]
 
     @rule('IDENT FILTER_ARGS')
     def visit_filter(self, _, children):
@@ -697,3 +949,208 @@ class FiltersParserMixin(ArgsParserMixin, BaseParser, metaclass=ABCMeta):
         """
 
         return children[1]
+
+
+class FiltersWithSlicingParserMixin(FiltersParserMixin, SliceParserMixin, metaclass=ABCMeta):
+    """Parser mixin that provides rules to manage filters, including slices.
+
+    To use it, add this mixin to the class bases, and use``FILTERS`` in your rule(s).
+
+    Results
+    -------
+    list of Filter or SliceFilter
+        The output of the ``visit_filters`` is a list of ``Filter`` or ``SliceFilter`` objects.
+        The list may be empty.
+
+    Example
+    -------
+
+    >>> FiltersWithSlicingParserMixin(r'foo').data
+    [.foo]
+    >>> FiltersWithSlicingParserMixin(r'foo.0').data
+    [.foo, [0]]
+    >>> FiltersWithSlicingParserMixin(r'foo.1').data
+    [.foo, [1]]
+    >>> FiltersWithSlicingParserMixin(r'foo[0:2].bar').data
+    [.foo, [0:2], .bar]
+    >>> FiltersWithSlicingParserMixin(r'0').data
+    [[0]]
+    >>> FiltersWithSlicingParserMixin(r'0.foo').data
+    [[0], .foo]
+    >>> FiltersWithSlicingParserMixin(r'[1]').data
+    [[1]]
+    >>> FiltersWithSlicingParserMixin(r'[0:2]').data
+    [[0:2]]
+    >>> FiltersWithSlicingParserMixin(r'[0:2].foo').data
+    [[0:2], .foo]
+
+    """
+
+    @rule('NB')
+    def visit_nb_filter(self, _, children):
+        """A number used as a filter, to retrieve an entry in a list.
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: a number
+
+        Returns
+        -------
+        .resources.SliceFilter
+            An instance of ``SliceFilter`` filed with the number as index, and no slice.
+
+        Example
+        -------
+
+        >>> FiltersWithSlicingParserMixin('1', default_rule='NB_FILTER').data
+        [1]
+
+        """
+
+        return self.SliceFilter(children[0])
+
+    @rule('SLICE')
+    def visit_slice_filter(self, _, children):
+        """A slice, to retrieve 0, 1 or more elements from a list.
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: a ``slice`` object or a number
+
+        Returns
+        -------
+        .resources.SliceFilter
+            An instance of ``SliceFilter`` using the the slice or number.
+
+        Example
+        -------
+
+        >>> FiltersWithSlicingParserMixin('[1]', default_rule='SLICE_FILTER').data
+        [1]
+        >>> FiltersWithSlicingParserMixin('[1:2]', default_rule='SLICE_FILTER').data
+        [1:2]
+
+        """
+
+        return self.SliceFilter(children[0])
+
+    @rule('SLICE_FILTER / NB_FILTER / FILTER')
+    def visit_first_filter(self, _, children):
+        """The first filter, so not preceded by a dot, could be a slice (or number) or a filter.
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: a ``slice`` object or a ``Filter`` resource.
+
+        Returns
+        -------
+        Filter or SliceFilter
+            An instance of ``Filter`` if a filter, or ``SliceFilter`` if a number or a slice.
+
+        Example
+        -------
+
+        >>> FiltersWithSlicingParserMixin('1', default_rule='FIRST_FILTER').data
+        [1]
+        >>> FiltersWithSlicingParserMixin('[1]', default_rule='FIRST_FILTER').data
+        [1]
+        >>> FiltersWithSlicingParserMixin('[1:2]', default_rule='FIRST_FILTER').data
+        [1:2]
+        >>> FiltersWithSlicingParserMixin('foo', default_rule='FIRST_FILTER').data
+        .foo
+
+        """
+
+        return children[0]
+
+    @rule('DOT DOTTABLE_FILTER')
+    def visit_dotted_filter(self, _, children):
+        """A filter, preceded by a dot, could be a number (not a full slice) or a filter.
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: for ``DOT`` (a dot): ``None``.
+            - 1: a ``Filter`` or ``SliceFilter`` (with only ``index`` set)
+
+        Returns
+        -------
+        Filter or SliceFilter
+            An instance of ``Filter`` if a filter, or ``SliceFilter`` if a number.
+
+        Example
+        -------
+
+        >>> FiltersWithSlicingParserMixin('.1', default_rule='DOTTED_FILTER').data
+        [1]
+        >>> FiltersWithSlicingParserMixin('.foo', default_rule='DOTTED_FILTER').data
+        .foo
+
+        """
+
+        return children[1]
+
+    @rule('NB_FILTER / FILTER')
+    def visit_dottable_filter(self, _, children):
+        """A filter that can be preceded by a dot. Could be a number (not full slice) or a filter.
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: a ``Filter`` or ``SliceFilter`` (with only ``index`` set)
+
+        Returns
+        -------
+        Filter or SliceFilter
+            An instance of ``Filter`` if a filter, or ``SliceFilter`` if a number.
+
+        Example
+        -------
+
+        >>> FiltersWithSlicingParserMixin('1', default_rule='DOTTABLE_FILTER').data
+        [1]
+        >>> FiltersWithSlicingParserMixin('foo', default_rule='DOTTABLE_FILTER').data
+        .foo
+
+        """
+
+        return children[0]
+
+    @rule('SLICE_FILTER / DOTTED_FILTER')
+    def visit_next_filter(self, _, children):
+        """A filter, not the first one. Could be a slice or a filter (or number) preceded by a dot.
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: a ``Filter`` or ``SliceFilter``
+
+        Returns
+        -------
+        Filter or SliceFilter
+            An instance of ``Filter`` if a filter, or ``SliceFilter`` if a number or a slice.
+
+        Example
+        -------
+
+        >>> FiltersWithSlicingParserMixin('[1]', default_rule='NEXT_FILTER').data
+        [1]
+        >>> FiltersWithSlicingParserMixin('[1:2]', default_rule='NEXT_FILTER').data
+        [1:2]
+        >>> FiltersWithSlicingParserMixin('.1', default_rule='NEXT_FILTER').data
+        [1]
+        >>> FiltersWithSlicingParserMixin('.foo', default_rule='NEXT_FILTER').data
+        .foo
+
+        """
+
+        return children[0]
