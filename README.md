@@ -21,10 +21,12 @@ with this example query:
 User.get('Elon Musk') {
     name,
     birthday.strftime('%x'),
-    companies[
+    companies[{
         name,
-        date:created_year,
-    ]
+        year:created_year,
+    }],
+    company_names: companies[name],
+    first_company:companies.0.name,
 }
 ```
 
@@ -37,13 +39,15 @@ And to get data like that:
     'companies': [
         {
             'name': 'Paypal',
-            'date': 1999
+            'year': 1999
         },
         {
             'name': 'Space X',
-            'date': 2002
+            'year': 2002
         }
-    ]
+    ],
+    'company_names': ['Paypal', 'Space X'],
+    'first_company': 'Paypal',
 }
 ```
 
@@ -103,7 +107,7 @@ This prototype is working as expected, but there is a lot of things to do:
 - create an advanced solver for Django (using `select_related` and `prefetch_related`)
 - ~~allow the use of filters that are not attributes of instances, but simple functions~~
 - allow the retrieval of ~~list entries~~ or dict entries, not only instance attributes
-- allow returning lists of values, not only objects
+- ~~allow returning lists of values, not only objects~~
 - tell me
 
 ## Tests

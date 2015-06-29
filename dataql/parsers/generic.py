@@ -126,7 +126,7 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
         resource.is_root = True
         return resource
 
-    @rule('LIST / OBJECT / FIELD')
+    @rule('NAMED_LIST / NAMED_OBJECT / FIELD')
     def visit_resource(self, _, children):
         """A resource in the query, could be a list, an object or a simple field.
 
@@ -199,7 +199,7 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
         return resource
 
     @rule('COM NAMED_RESOURCE')
-    def visit_next_resource(self, _, children):
+    def visit_next_named_resource(self, _, children):
         """A resource in the query preceded by a coma, to define a resource following an other one.
 
         Arguments
@@ -217,9 +217,11 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
         Example
         -------
 
-        >>> DataQLParser(r', foo', default_rule='NEXT_RESOURCE').data
+        >>> DataQLParser(r', foo', default_rule='NEXT_NAMED_RESOURCE').data
         <Field[foo] />
-        >>> DataQLParser(r', bar[name]', default_rule='NEXT_RESOURCE').data
+        >>> DataQLParser(r', foo:bar', default_rule='NEXT_NAMED_RESOURCE').data
+        <Field[foo] .bar />
+        >>> DataQLParser(r', bar[name]', default_rule='NEXT_NAMED_RESOURCE').data
         <List[bar]>
           <Field[name] />
         </List[bar]>
@@ -228,15 +230,15 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
 
         return children[1]
 
-    @rule('NEXT_RESOURCE*')
-    def visit_next_resources(self, _, children):
+    @rule('NEXT_NAMED_RESOURCE*')
+    def visit_next_named_resources(self, _, children):
         """A list of resource in the query following the first resource.
 
         Arguments
         ---------
         _ (node) : parsimonious.nodes.Node.
         children : list
-            - 0: for ``NEXT_RESOURCE*``: a list of instances of subclasses of
+            - 0: for ``NEXT_NAMED_RESOURCE*``: a list of instances of subclasses of
                 ``.resources.Resource``.
 
         Returns
@@ -247,13 +249,13 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
         Example
         -------
 
-        >>> DataQLParser(r'', default_rule='NEXT_RESOURCES').data
+        >>> DataQLParser(r'', default_rule='NEXT_NAMED_RESOURCES').data
         []
-        >>> DataQLParser(r', foo', default_rule='NEXT_RESOURCES').data
+        >>> DataQLParser(r', foo', default_rule='NEXT_NAMED_RESOURCES').data
         [<Field[foo] />]
-        >>> DataQLParser(r', foo, bar', default_rule='NEXT_RESOURCES').data
-        [<Field[foo] />, <Field[bar] />]
-        >>> DataQLParser(r', foo[name], bar{name}, baz', default_rule='NEXT_RESOURCES').data
+        >>> DataQLParser(r', foo, bar:baz', default_rule='NEXT_NAMED_RESOURCES').data
+        [<Field[foo] />, <Field[bar] .baz />]
+        >>> DataQLParser(r', foo[name], bar{name}, baz', default_rule='NEXT_NAMED_RESOURCES').data
         [<List[foo]>
           <Field[name] />
         </List[foo]>, <Object[bar]>
@@ -264,17 +266,17 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
 
         return children
 
-    @rule('NAMED_RESOURCE NEXT_RESOURCES COM?')
-    def visit_content(self, _, children):
+    @rule('NAMED_RESOURCE NEXT_NAMED_RESOURCES COM?')
+    def visit_named_content(self, _, children):
         """The content of a resource, composed of a list of resources.
 
         Arguments
         ---------
         _ (node) : parsimonious.nodes.Node.
         children : list
-            - 0: for ``RESOURCE``: first resource, instance of a subclass of
+            - 0: for ``NAMED_RESOURCE``: first resource, instance of a subclass of
                  ``.resources.Resource``.
-            - 1: for ``NEXT_RESOURCES``: resources following the first one, list of instances
+            - 1: for ``NEXT_NAMED_RESOURCES``: resources following the first one, list of instances
                  of subclasses of ``.resources.Resource``.
             - 2: for ``COM`` (trailing coma): ``None``.
 
@@ -286,13 +288,15 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
         Example
         -------
 
-        >>> DataQLParser(r'foo', default_rule='CONTENT').data
+        >>> DataQLParser(r'foo', default_rule='NAMED_CONTENT').data
         [<Field[foo] />]
-        >>> DataQLParser(r'foo,', default_rule='CONTENT').data
+        >>> DataQLParser(r'foo:bar', default_rule='NAMED_CONTENT').data
+        [<Field[foo] .bar />]
+        >>> DataQLParser(r'foo,', default_rule='NAMED_CONTENT').data
         [<Field[foo] />]
-        >>> DataQLParser(r'foo, bar', default_rule='CONTENT').data
+        >>> DataQLParser(r'foo, bar', default_rule='NAMED_CONTENT').data
         [<Field[foo] />, <Field[bar] />]
-        >>> DataQLParser(r'foo[name], bar{name}, baz, ', default_rule='CONTENT').data
+        >>> DataQLParser(r'foo[name], bar{name}, baz, ', default_rule='NAMED_CONTENT').data
         [<List[foo]>
           <Field[name] />
         </List[foo]>, <Object[bar]>
@@ -391,111 +395,292 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
         <Field[foo] .foo.bar() />
         """
 
-        return self.filters_to_resource(children[0], self.Field)
+        filters = children[0]
+        return self.Field(filters[0].name, filters=filters)
 
-    @staticmethod
-    def filters_to_resource(filters, klass, **kwargs):
-        """Helper to create a resource taking its name from the first filter."""
+    @rule('FILTERS OBJECT')
+    def visit_named_object(self, _, children):
+        """Manage an object, represented by a ``.resources.Object`` instance.
 
-        attrs = {
-            'name': filters[0].name,
-            'filters': filters,
-        }
-        attrs.update(kwargs)
-
-        return klass(**attrs)
-
-    def visit_subresource(self, klass, _, children):
-        """Helper to create a List or Object.
-
-        The name of the resource is the name of the first filter. And if this first filter doesn't
-        have any argument, it is removed.
+        This object is populated with data from the result of the ``FILTERS``.
 
         Arguments
         ---------
-        klass: The class for which we want an instance
         _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``FILTERS``: list of instances of ``.resources.Field``.
-            - 1: for ``CUR_O`` or ``BRA_O`` (opening curly/bracket): ``None``.
-            - 2: for ``CONTENT``: list of instances of subclasses of ``.resources.Resource``,
-                 forming the content of the object/list
-            - 3: for ``CUR_C`` or ``BRA_C`` (closing curly/bracket): ``None``.
+            - 1: for ``OBJECT``: an ``Object`` resource
 
         Example
         -------
 
-        >>> DataQLParser(r'foo{name}', default_rule='OBJECT').data
+        >>> DataQLParser(r'foo{name}', default_rule='NAMED_OBJECT').data
         <Object[foo]>
           <Field[name] />
         </Object[foo]>
-        >>> DataQLParser(r'foo(1)[name]', default_rule='LIST').data
-        <List[foo] .foo(1)>
-          <Field[name] />
-        </List[foo]>
 
         """
 
-        return self.filters_to_resource(children[0], klass)
+        filters, resource = children
+        resource.name = filters[0].name
+        resource.filters = filters
 
-    @rule('FILTERS CUR_O CONTENT CUR_C')
+        return resource
+
+    @rule('CUR_O NAMED_CONTENT CUR_C')
     def visit_object(self, _, children):
         """Manage an object, represented by a ``.resources.Object`` instance.
 
-        The first filter is removed to fill the name and args of the resource. See
-        ``filters_to_resource`` for more details.
-
-
         Arguments
         ---------
         _ (node) : parsimonious.nodes.Node.
         children : list
-            - 0: for ``FILTERS``: list of instances of ``.resources.Field``.
-            - 1: for ``CUR_O`` (opening curly): ``None``.
-            - 2: for ``CONTENT``: list of instances of subclasses of ``.resources.Resource``,
+            - 0: for ``CUR_O`` (opening curly): ``None``.
+            - 1: for ``CONTENT``: list of instances of subclasses of ``.resources.Resource``,
                  forming the content of the object/list
-            - 3: for ``CUR_C`` (closing curly): ``None``.
+            - 2: for ``CUR_C`` (closing curly): ``None``.
 
         Example
         -------
 
-        >>> DataQLParser(r'foo{name}', default_rule='OBJECT').data
-        <Object[foo]>
+        >>> DataQLParser(r'{name}', default_rule='OBJECT').data
+        <Object>
           <Field[name] />
-        </Object[foo]>
+        </Object>
 
         """
 
-        return self.filters_to_resource(children[0], self.Object, resources=children[2])
+        return self.Object(name=None, resources=children[1])
 
-    @rule('FILTERS BRA_O CONTENT BRA_C')
-    def visit_list(self, _, children):
+    @rule('FILTERS LIST')
+    def visit_named_list(self, _, children):
         """Manage a list, represented by a ``.resources.List`` instance.
 
-        The first filter is removed to fill the name and args of the resource. See
-        ``filters_to_resource`` for more details.
+        This list is populated with data from the result of the ``FILTERS``.
 
         Arguments
         ---------
         _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: for ``FILTERS``: list of instances of ``.resources.Field``.
-            - 1: for ``BRA_O`` (opening bracket): ``None``.
-            - 2: for ``CONTENT``: list of instances of subclasses of ``.resources.Resource``,
-                 forming the content of the object/list
-            - 3: for ``BRA_C`` (closing bracket): ``None``.
+            - 1: for ``LIST``: a ``List`` resource
 
         Example
         -------
 
-        >>> DataQLParser(r'foo(1)[name]', default_rule='LIST').data
+        >>> DataQLParser(r'foo(1)[name]', default_rule='NAMED_LIST').data
         <List[foo] .foo(1)>
           <Field[name] />
         </List[foo]>
 
         """
 
-        return self.filters_to_resource(children[0], self.List, resources=children[2])
+        filters, resource = children
+        resource.name = filters[0].name
+        resource.filters = filters
+
+        return resource
+
+    @rule('BRA_O LIST_CONTENT BRA_C')
+    def visit_list(self, _, children):
+        """Manage a list, represented by a ``.resources.List`` instance.
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: for ``CUR_O`` (opening curly): ``None``.
+            - 1: for ``CONTENT``: list of instances of subclasses of ``.resources.Resource``,
+                 forming the content of the list.
+            - 2: for ``CUR_C`` (closing curly): ``None``.
+
+        Example
+        -------
+
+        >>> DataQLParser(r'[foo]', default_rule='LIST').data
+        <List>
+          <Field[foo] />
+        </List>
+        >>> DataQLParser(r'[foo,]', default_rule='LIST').data
+        <List>
+          <Field[foo] />
+        </List>
+        >>> DataQLParser(r'[foo, bar]', default_rule='LIST').data
+        <List>
+          <Field[foo] />
+          <Field[bar] />
+        </List>
+        >>> DataQLParser(r'[foo, [bar]]', default_rule='LIST').data
+        <List>
+          <Field[foo] />
+          <List>
+            <Field[bar] />
+          </List>
+        </List>
+        >>> DataQLParser(r'[[foo, bar], babar{baz, qux}, quz]', default_rule='LIST').data
+        <List>
+          <List>
+            <Field[foo] />
+            <Field[bar] />
+          </List>
+          <Object[babar]>
+            <Field[baz] />
+            <Field[qux] />
+          </Object[babar]>
+          <Field[quz] />
+        </List>
+
+        """
+
+        return self.List(name=None, resources=children[1])
+
+    @rule('NAMED_LIST / LIST / NAMED_OBJECT / OBJECT / FIELD')
+    def visit_list_resource(self, _, children):
+        """A resource in the query, could be a list, an object or a simple field.
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: an instance of a subclass of ``.resources.Resource``, depending of the type that
+              matches the rule.
+
+        Returns
+        -------
+        .resources.Resource
+            An instance of a subclass of ``.resources.Resource``, with ``is_root`` set to ``True``.
+            It's a ``.resources.List`` if the query matches the ``LIST`` rule,
+            ``.resources.Object`` if it matches the ``OBJECT`` rule, or ``.resources.Field`` if
+            it matches `` the ``FIELD`` rule.
+
+        Example
+        -------
+
+        >>> DataQLParser(r'foo', default_rule='RESOURCE').data
+        <Field[foo] />
+        >>> DataQLParser(r'bar[name]', default_rule='RESOURCE').data
+        <List[bar]>
+          <Field[name] />
+        </List[bar]>
+        >>> DataQLParser(r'baz{name}', default_rule='RESOURCE').data
+        <Object[baz]>
+          <Field[name] />
+        </Object[baz]>
+
+        """
+
+        return children[0]
+
+    @rule('COM LIST_RESOURCE')
+    def visit_next_list_resource(self, _, children):
+        """A resource in the query preceded by a coma, to define a resource following an other one.
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: for ``COM`` (coma): ``None``.
+            - 1: for ``RESOURCE``: an instance of a subclass of ``.resources.Resource``.
+
+        Returns
+        -------
+        .resources.Resource
+            An instance of a subclass of ``.resources.Resource``.
+
+        Example
+        -------
+
+        >>> DataQLParser(r', foo', default_rule='NEXT_LIST_RESOURCE').data
+        <Field[foo] />
+        >>> DataQLParser(r', bar[name]', default_rule='NEXT_LIST_RESOURCE').data
+        <List[bar]>
+          <Field[name] />
+        </List[bar]>
+        >>> DataQLParser(r', bar{name}', default_rule='NEXT_LIST_RESOURCE').data
+        <Object[bar]>
+          <Field[name] />
+        </Object[bar]>
+
+        """
+
+        return children[1]
+
+    @rule('NEXT_LIST_RESOURCE*')
+    def visit_next_list_resources(self, _, children):
+        """A list of resource in the query following the first resource.
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: for ``NEXT_RESOURCE*``: a list of instances of subclasses of
+                ``.resources.Resource``.
+
+        Returns
+        -------
+        list(.resources.Resource)
+            A list of instances of subclasses of ``.resources.Resource``.
+
+        Example
+        -------
+
+        >>> DataQLParser(r'', default_rule='NEXT_LIST_RESOURCES').data
+        []
+        >>> DataQLParser(r', foo', default_rule='NEXT_LIST_RESOURCES').data
+        [<Field[foo] />]
+        >>> DataQLParser(r', foo[name], bar{name}, baz', default_rule='NEXT_LIST_RESOURCES').data
+        [<List[foo]>
+          <Field[name] />
+        </List[foo]>, <Object[bar]>
+          <Field[name] />
+        </Object[bar]>, <Field[baz] />]
+
+        """
+
+        return children
+
+    @rule('LIST_RESOURCE NEXT_LIST_RESOURCES COM?')
+    def visit_list_content(self, _, children):
+        """The content of a resource, composed of a list of resources.
+
+        Resources have no name: we don't expect a dict in return, but a single item (if
+        only one resource) or a list (if many resource)
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list
+            - 0: for ``RESOURCE``: first resource, instance of a subclass of
+                 ``.resources.Resource``.
+            - 1: for ``NEXT_RESOURCES``: resources following the first one, list of instances
+                 of subclasses of ``.resources.Resource``.
+            - 2: for ``COM`` (trailing coma): ``None``.
+
+        Returns
+        -------
+        list(.resources.Resource)
+            A list of instances of subclasses of ``.resources.Resource``.
+
+        Example
+        -------
+
+        >>> DataQLParser(r'foo', default_rule='LIST_CONTENT').data
+        [<Field[foo] />]
+        >>> DataQLParser(r'foo,', default_rule='LIST_CONTENT').data
+        [<Field[foo] />]
+        >>> DataQLParser(r'foo, bar', default_rule='LIST_CONTENT').data
+        [<Field[foo] />, <Field[bar] />]
+        >>> DataQLParser(r'foo[name], bar{name}, baz, ', default_rule='LIST_CONTENT').data
+        [<List[foo]>
+          <Field[name] />
+        </List[foo]>, <Object[bar]>
+          <Field[name] />
+        </Object[bar]>, <Field[baz] />]
+
+        """
+
+        return [children[0]] + (children[1] or [])
+
 
 
 class DebugDataQLParser(DataQLParser):
@@ -522,7 +707,7 @@ class DebugDataQLParser(DataQLParser):
         """New rule to accept as ROOT rule a optional name and a ROOT_RESOURCE."""
         return super().visit_named_resource(*args)
 
-    @rule('LIST / OBJECT')
+    @rule('NAMED_LIST / NAMED_OBJECT')
     def visit_root_resource(self, *args):
         """New rule to accept only LIST or OBJECT as root resource."""
         return super().visit_resource(*args)

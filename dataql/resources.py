@@ -89,7 +89,7 @@ class Resource(metaclass=ABCMeta):
 
         self.parent = None
 
-        if not self.filters:
+        if not self.filters and self.name:
             self.filters = [Filter(name=self.name)]
 
         for filter_ in self.filters:
@@ -120,12 +120,13 @@ class Resource(metaclass=ABCMeta):
         """
 
         filters = ''
-        if len(self.filters) > 1 or self.filters[0].name != self.name or self.filters[0].args:
+        if len(self.filters) > 1 or self.filters and (
+                self.filters[0].name != self.name or self.filters[0].args):
             filters = ' ' + ''.join(map(str, self.filters))
 
-        result = '%(indent)s<%(cls)s[%(name)s]%(filters)s />' % {
+        result = '%(indent)s<%(cls)s%(name)s%(filters)s />' % {
             'cls': self.__class__.__name__,
-            'name': '%s' % self.name,
+            'name': ('[%s]' % self.name) if self.name else '',
             'filters': filters,
             'indent': '  ' * self.get_level(),
         }
@@ -231,12 +232,12 @@ class MultiResources(Resource, metaclass=ABCMeta):
             return (
                 '%(start)s\n'
                 '%(sub)s\n'
-                '%(indent)s</%(cls)s[%(name)s]>'
+                '%(indent)s</%(cls)s%(name)s>'
             ) % {
                 'start': parent_repr[:-3] + '>',
                 'sub': '\n'.join(map(str, self.resources)),
                 'cls': self.__class__.__name__,
-                'name': self.name,
+                'name': ('[%s]' % self.name) if self.name else '',
                 'indent': '  ' * self.get_level(),
             }
         else:

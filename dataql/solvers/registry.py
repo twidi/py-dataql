@@ -1208,21 +1208,20 @@ class Registry(Mapping):
         ...     dates = [date(2015, 6, 1), date(2015, 6, 2), date(2015, 6, 3)],
         ... )
 
-        >>> d = registry.solve_resource(
+        >>> from pprint import pprint  # will sort the dicts by keys
+        >>> pprint(registry.solve_resource(
         ...     obj,
         ...     # Omit single filter as it's auto-created with the name of the resource.
         ...     Object('date', resources=[Field('day'), Field('month'), Field('year')])
-        ... )
-        >>> [(k, d[k]) for k in sorted(d)]
-        [('day', 1), ('month', 6), ('year', 2015)]
+        ... ))
+        {'day': 1, 'month': 6, 'year': 2015}
 
-        >>> ds = list(registry.solve_resource(
+        >>> registry.solve_resource(
         ...     obj,
         ...     # Omit single filter as it's auto-created with the name of the resource.
         ...     List('dates', resources=[Field('day'), Field('month'), Field('year')])
-        ... ))
-        >>> [[(k, d[k]) for k in sorted(d)] for d in ds][:2]
-        [[('day', 1), ('month', 6), ('year', 2015)], [('day', 2), ('month', 6), ('year', 2015)]]
+        ... )
+        [[1, 6, 2015], [2, 6, 2015], [3, 6, 2015]]
 
         >>> registry.solve_resource(
         ...     obj,
@@ -1230,7 +1229,7 @@ class Registry(Mapping):
         ... )
         '2015-06-02'
 
-        # No way for now to retrieve a list that is not a list of dict
+        # List of fields
         >>> registry.solve_resource(
         ...     obj,
         ...     List('dates',
@@ -1238,7 +1237,34 @@ class Registry(Mapping):
         ...         resources=[Field('date', filters=[Filter('strftime', args=[PosArg('%F')])])]
         ...     )
         ... )
+        ['2015-06-02', '2015-06-03']
+
+        # List of objects
+        >>> registry.solve_resource(
+        ...     obj,
+        ...     List('dates',
+        ...         filters=[Filter('dates'), SliceFilter(slice(1, None, None))],
+        ...         resources=[Object(None, resources=[
+        ...             Field('date', filters=[Filter('strftime', args=[PosArg('%F')])])
+        ...         ]
+        ...     )]
+        ... ))
         [{'date': '2015-06-02'}, {'date': '2015-06-03'}]
+
+        # List of list
+        >>> pprint(registry.solve_resource(
+        ...     obj,
+        ...     List(None,
+        ...         filters=[Filter('dates'), SliceFilter(slice(None, None, 2))],
+        ...         resources=[
+        ...             Field(None, [Filter('strftime', args=[PosArg('%F')])]),
+        ...             Object(None, resources=[Field('day'), Field('month'), Field('year')]),
+        ...             ]
+        ...     )
+        ... ))
+        [['2015-06-01', {'day': 1, 'month': 6, 'year': 2015}],
+         ['2015-06-03', {'day': 3, 'month': 6, 'year': 2015}]]
+
 
         # Example of ``SolveFailure`` exception.
         >>> from dataql.solvers.exceptions import CannotSolve

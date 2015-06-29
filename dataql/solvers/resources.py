@@ -322,51 +322,7 @@ class AttributeSolver(Solver):
         return str(value)
 
 
-class MultiResourcesBaseSolver(Solver, metaclass=ABCMeta):
-    """A base class for solver for resources with sub-resources.
-
-    Notes
-    -----
-    This base class simply provides a ``solve_subresources`` method to return a dict containing
-    each solved resources.
-
-    """
-
-    def solve_subresources(self, value, resources):
-        """Solve many resources from a value.
-
-        Arguments
-        ---------
-        value : ?
-            The value to get some resources from.
-        resources : iterable[dataql.resource.Resource]
-            A list (or other iterable) of resources (instances of ``dataql.resource.Resource``
-            subclasses).
-
-        Returns
-        -------
-        dict
-            A dictionary containing the wanted resources for the given value.
-            Key are the ``name`` attributes of the resources, and the values are the solved values.
-
-        Example
-        -------
-        >>> from dataql.solvers.registry import Registry
-        >>> registry = Registry()
-        >>> from datetime import date
-        >>> registry.register(date)
-        >>> solver = ObjectSolver(registry)
-        >>> d = solver.solve_subresources(date(2015, 6, 1), [
-        ... Field('day'), Field('month'), Field('year')])
-        >>> [(k, d[k]) for k in sorted(d)]
-        [('day', 1), ('month', 6), ('year', 2015)]
-
-        """
-
-        return {r.name: self.registry.solve_resource(value, r) for r in resources}
-
-
-class ObjectSolver(MultiResourcesBaseSolver):
+class ObjectSolver(Solver):
     """Solver aimed to retrieve many fields from values.
 
     This solver can only handle ``dataql.resources.Object`` resources.
@@ -415,10 +371,10 @@ class ObjectSolver(MultiResourcesBaseSolver):
 
         """
 
-        return self.solve_subresources(value, resource.resources)
+        return {r.name: self.registry.solve_resource(value, r) for r in resource.resources}
 
 
-class ListSolver(MultiResourcesBaseSolver):
+class ListSolver(Solver):
     """Solver aimed to retrieve many fields from many values of the same type.
 
     This solver can only handle ``dataql.resources.List`` resources.
@@ -440,17 +396,40 @@ class ListSolver(MultiResourcesBaseSolver):
 
         >>> solver = ListSolver(registry)
 
-        >>> ds = list(solver.solve(
+        >>> from dataql.resources import Filter, PosArg
+        >>> solver.solve(
+        ...     obj,
+        ...     List('dates', resources=[Field(None, [Filter('strftime', args=[PosArg('%F')])])])
+        ... )
+        ['2015-06-01', '2015-06-02']
+
+        >>> solver.solve(
         ...     obj,
         ...     List('dates', resources=[Field('day'), Field('month'), Field('year')])
-        ... ))
-        >>> [[(k, d[k]) for k in sorted(d)] for d in ds]
-        [[('day', 1), ('month', 6), ('year', 2015)], [('day', 2), ('month', 6), ('year', 2015)]]
+        ... )
+        [[1, 6, 2015], [2, 6, 2015]]
 
-        >>> ds = list(solver.solve(
+        >>> from pprint import pprint  # will sort the dicts by keys
+        >>> pprint(solver.solve(
+        ...     obj,
+        ...     List('dates', resources=[
+        ...         Field(None, [Filter('strftime', args=[PosArg('%F')])]),
+        ...         Object(None, resources=[Field('day'), Field('month'), Field('year')]),
+        ...         ])
+        ... ))
+        [['2015-06-01', {'day': 1, 'month': 6, 'year': 2015}],
+         ['2015-06-02', {'day': 2, 'month': 6, 'year': 2015}]]
+
+        >>> pprint(solver.solve(
+        ...     obj,
+        ...     List('dates', resources=[Object(None, resources=[Field('day'), Field('month'), Field('year')])])
+        ... ))
+        [{'day': 1, 'month': 6, 'year': 2015}, {'day': 2, 'month': 6, 'year': 2015}]
+
+        >>> solver.solve(
         ...     obj,
         ...     List('date', resources=[Field('day'), Field('month'), Field('year')])
-        ... )) # doctest: +ELLIPSIS
+        ... ) # doctest: +ELLIPSIS
         Traceback (most recent call last):
         dataql.solvers.exceptions.NotIterable: ...
 
@@ -471,9 +450,12 @@ class ListSolver(MultiResourcesBaseSolver):
 
         Returns
         -------
-        list[dict]
-            A list of dictionaries containing the wanted resources for the given values.
-            Key are the ``name`` attributes of the resources, and the values are the solved values.
+        list
+            A list with one entry for each iteration get from ``value``.
+            If the ``resource`` has only one sub-resource, each entry in the result list will
+            be the result for the subresource for each iteration.
+            If the ``resource`` has more that one sub-resource, each entry in the result list will
+            be another list with an entry for each subresource for the current iteration.
 
         Raises
         ------
@@ -484,4 +466,16 @@ class ListSolver(MultiResourcesBaseSolver):
 
         if not isinstance(value, Iterable):
             raise NotIterable(resource, self.registry[value])
-        return [self.solve_subresources(entry, resource.resources) for entry in value]
+
+        # Case #1: we only have one sub-resource, so we return a list with this item for
+        # each iteration
+        if len(resource.resources) == 1:
+            res = resource.resources[0]
+            return [self.registry.solve_resource(v, res) for v in value]
+
+        # Case #2: we have many sub-resources, we return a list with, for each iteration, a
+        # list with all entries
+        return [
+            [self.registry.solve_resource(v, res) for res in resource.resources]
+            for v in value
+        ]
