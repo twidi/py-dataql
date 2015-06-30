@@ -5,16 +5,37 @@ to manage the creation of the grammar using the ones from all parent classes.
 
 """
 
+# pylint: disable=no-self-use
+
+from abc import ABCMeta
 from inspect import isfunction
 import re
+import sys
 
-from parsimonious import Grammar, NodeVisitor, rule
+from parsimonious import Grammar, NodeVisitor
+from parsimonious.exceptions import ParseError, UndefinedLabel, VisitationError
 from parsimonious.nodes import RuleDecoratorMeta as BaseRuleDecoratorMeta
 
-from dataql.resources import *
+from dataql import resources
+from dataql.parsers.exceptions import ParserError
 
 
-class RuleDecoratorMeta(BaseRuleDecoratorMeta):
+def rule(rule_string):
+    """Decorate a NodeVisitor ``visit_*`` method to tie a grammar rule to it.
+
+    It's a simple rewrite from the ``rule`` decorator from ``parsimonious``, to stop using
+    a private attribute that raises pylint warnings.
+
+    """
+
+    def decorator(method):
+        """Add the rule as an attribute to the method."""
+        method.rule = rule_string
+        return method
+    return decorator
+
+
+class RuleDecoratorMeta(BaseRuleDecoratorMeta, ABCMeta):
     """Metaclass to use the @rule decorator.
 
     This metaclass allows to convert @rule decorators into real rules, but also to inherit
@@ -42,8 +63,9 @@ class RuleDecoratorMeta(BaseRuleDecoratorMeta):
     def __new__(mcs, name, bases, namespace):
 
         def get_rule_name_from_method(method_name):
-            """Remove any leading "visit_" from a method method_name."""
-            return method_name[6:] if method_name.startswith('visit_') else method_name
+            """Remove any leading "visit_" from a method method_name and get uppercase name"""
+            result = method_name[6:] if method_name.startswith('visit_') else method_name
+            return result.upper()
 
         # Grammar starts by the full grammar from parents (each parent can redefine a part).
         grammar_parts = [getattr(b, 'grammar_str', '') for b in reversed(bases)]
@@ -52,14 +74,14 @@ class RuleDecoratorMeta(BaseRuleDecoratorMeta):
 
         # Get all methods to use as rules (the ones decorated by ``@rule``).
         methods = [v for k, v in namespace.items() if
-                   hasattr(v, '_rule') and isfunction(v)]
+                   hasattr(v, 'rule') and isfunction(v)]
 
         if methods:
             # Keep them in the order defined in the code source.
             methods.sort(key=lambda x: x.__code__.co_firstlineno)
 
             for method in methods:
-                method_rule = method._rule
+                method_rule = method.rule
                 # Manage aliases: parsimonious cannot manage rules like "KEY = OTHERKEY"
                 # So we add a no-op.
                 match = mcs.ident_simple_parser.match(method_rule)
@@ -99,8 +121,7 @@ class RuleDecoratorMeta(BaseRuleDecoratorMeta):
 
         # We don't want to exec the __new__ method of our super class, ie BaseRuleDecoratorMeta
         # because we just rewrite everything it does.
-        return super(BaseRuleDecoratorMeta,
-                     mcs).__new__(mcs, name, bases, namespace)
+        return super().__new__(mcs, name, bases, namespace)
 
 
 class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
@@ -127,6 +148,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         - VALUE       => A value (string, number, null, false or true)
         - STR         => A string
         - NB          => A number (int, float, with or without scientific notation)
+        - OPTIONAL_NB => An optional number (see "NB"). None if not set.
         - NULL        => A ``None`` identifier ("null", "nil", "none", case insensitive)
         - FALSE       => A ``False`` identifier ("false" case insensitive)
         - TRUE        => A ``True`` identifier ("true" case insensitive)
@@ -142,18 +164,20 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         Instance of the ``parsimonious.Grammar`` class that holds the compiled grammar.
     grammar_str : str
         String representation of the ``grammar`.
-    Field : class
+    Field : class (class attribute)
         The class to use as a ``Field`` resource. Default to ``dataql.resources.Field``.
-    Object : class
+    Object : class (class attribute)
         The class to use as a ``Object`` resource. Default to ``dataql.resources.Object``.
-    List : class
+    List : class (class attribute)
         The class to use as a ``List`` resource. Default to ``dataql.resources.List``.
-    Filter : class
+    Filter : class (class attribute)
         The class to use as a ``Filter``. Default to ``dataql.resources.Filter``.
-    NamedArg : class
+    SliceFilter : class (class attribute)
+        The class to use as a ``SliceFilter``. Default to ``dataql.resources.SliceFilter``.
+    NamedArg : class (class attribute)
         The class to use as a ``NamedArg`` (named argument). Default to
         ``dataql.resources.NamedArg``.
-    PosArg : class
+    PosArg : class (class attribute)
         The class to use as a ``PosArg`` (positioned argument). Default to
         ``dataql.resources.PosArg``.
 
@@ -199,12 +223,13 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
 
     """
 
-    Field = Field
-    List = List
-    Object = Object
-    Filter = Filter
-    NamedArg = NamedArg
-    PosArg = PosArg
+    Field = resources.Field
+    List = resources.List
+    Object = resources.Object
+    Filter = resources.Filter
+    SliceFilter = resources.SliceFilter
+    NamedArg = resources.NamedArg
+    PosArg = resources.PosArg
 
     def __init__(self, text, default_rule=None):
         """Init the parser with some text to parse, and parse it.
@@ -225,6 +250,11 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         >>> parser.data
         'foo'
 
+        Raises
+        ------
+        ParserError
+            When the parser originally raised a ``parsimonious.exceptions.ParseError`` exception.
+
         """
 
         # If we want another default rule, it will create a new grammar object.
@@ -232,14 +262,44 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
             self.grammar = self.grammar.default(default_rule)
 
         # Parse the text and save the resource in the ``data`` attribute.
-        self.data = self.parse(text)
+        try:
+            self.data = self.parse(text)
+        except ParseError as ex:
+            # Raise our own exception with a more user friendly message
+            raise ParserError(ex)
+
+    def visit(self, node):
+        """Rewrite original method to use lower-case method, and not "generic" function."""
+
+        try:
+            # Get the "visit_%s" method, using the lower case version of the rule.
+            method = getattr(self, 'visit_%s' % node.expr_name.lower())
+        except AttributeError:
+            # If the method is not defined, we do nothing for this node.
+            return
+
+        # Below is untouched code from the original ``visit`` method.
+
+        # Call that method, and show where in the tree it failed if it blows up.
+        try:
+            return method(node, [self.visit(n) for n in node])
+        except (VisitationError, UndefinedLabel):
+            # Don't catch and re-wrap already-wrapped exceptions.
+            raise
+        except self.unwrapped_exceptions:
+            raise
+        except Exception:
+            # Catch any exception, and tack on a parse tree so it's easier to
+            # see where it went wrong.
+            exc_class, exc, trace = sys.exc_info()
+            raise VisitationError(exc, exc_class, node).with_traceback(trace)
 
     def generic_visit(self, node, children):
-        """Methods called for all rules with specific methods. Does nothing."""
+        """Methods not called, only to define abstract method from parent."""
         pass
 
     @rule('~"[_A-Z][_A-Z0-9]*"i')
-    def visit_IDENT(self, node, children):
+    def visit_ident(self, node, _):
         """Return a valid python identifier.
 
         It may be used for a resource name, a filter...
@@ -247,7 +307,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         Arguments
         ---------
         node : parsimonious.nodes.Node.
-        children : list, unused
+        _ (children) : list, unused
 
         Result
         ------
@@ -270,23 +330,23 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         'foo1'
         >>> BaseParser('1foo', default_rule='IDENT').data # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-        parsimonious.exceptions.ParseError:
+        dataql.parsers.exceptions.ParserError:
         >>> BaseParser('foo-bar', default_rule='IDENT').data # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-        parsimonious.exceptions.IncompleteParseError:
+        dataql.parsers.exceptions.ParserError:
 
         """
 
         return node.text
 
     @rule('COL_OR_EQ')
-    def visit_OPER(self, node, children):
+    def visit_oper(self, node, _):
         """Return an operator as a string. Currently only "=" and ":" (both synonyms)
 
         Arguments
         ---------
         node : parsimonious.nodes.Node.
-        children : list, unused
+        _ (children) : list, unused
 
         Result
         ------
@@ -309,12 +369,12 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return oper
 
     @rule('STR / NB / NULL / FALSE / TRUE')
-    def visit_VALUE(self, node, children):
+    def visit_value(self, _, children):
         """Return a value, which is a string, a number, a null/false/true like value.
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
+        _ (node) : parsimonious.nodes.Node.
         children : list
             - 0: the value to return
 
@@ -343,13 +403,13 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return children[0]
 
     @rule(r'~"([\'\"])(?:[^\\1\\\\]|\\\\.)*?\\1"')
-    def visit_STR(self, node, children):
+    def visit_str(self, node, _):
         """Regex rule for quoted string allowing escaped quotes inside.
 
         Arguments
         ---------
         node : parsimonious.nodes.Node.
-        children : list, unused
+        _ (children) : list, unused
 
         Result
         ------
@@ -381,12 +441,12 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         """
 
         # remove surrounding quotes and remove single backslashes
-        return self.visit_STR.re_single_backslash.sub('', node.text[1:-1])
+        return self.visit_str.re_single_backslash.sub('', node.text[1:-1])
     # regex  to unquote single quote characters
-    visit_STR.re_single_backslash = re.compile(r'(?<!\\)\\')
+    visit_str.re_single_backslash = re.compile(r'(?<!\\)\\')
 
-    @rule('~"[-+]?\d*\.?\d+([eE][-+]?\d+)?"')
-    def visit_NB(self, node, children):
+    @rule(r'~"[-+]?\d*\.?\d+([eE][-+]?\d+)?"')
+    def visit_nb(self, node, _):
         """Return a int of float from the given number.
 
         Also work with scientific notation like 1e+50.
@@ -394,7 +454,7 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         Arguments
         ---------
         node : parsimonious.nodes.Node.
-        children : list, unused
+        _ (children) : list, unused
 
         Result
         ------
@@ -424,14 +484,39 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
 
         return self.convert_nb(node.text)
 
+    @rule('NB?')
+    def visit_optional_nb(self, _, children):
+        """Return a int of float (see the NB rule) or None.
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : list, unused
+
+        Result
+        ------
+        int or float or None
+
+        Example
+        -------
+
+        >>> BaseParser('', default_rule='OPTIONAL_NB').data
+
+        >>> BaseParser('1', default_rule='OPTIONAL_NB').data
+        1
+
+        """
+
+        return children[0] if children else None
+
     @rule('~"(?:null|nil|none)"i')
-    def visit_NULL(self, node, children):
+    def visit_null(self, *_):
         """Return ``None`` for the string "null", "none", or "nil" (case insensitive)
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
-        children : list, unused
+        _[0] (node) : parsimonious.nodes.Node.
+        _[1] (children) : list, unused
 
         Returns
         -------
@@ -464,13 +549,13 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return None
 
     @rule('~"(?:false)"i')
-    def visit_FALSE(self, node, children):
+    def visit_false(self, *_):
         """Return ``False`` for the string "false" (case insensitive)
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
-        children : list, unused
+        _[0] (node) : parsimonious.nodes.Node.
+        _[1] (children) : list, unused
 
         Returns
         -------
@@ -491,13 +576,13 @@ class BaseParser(NodeVisitor, metaclass=RuleDecoratorMeta):
         return False
 
     @rule('~"(?:true)"i')
-    def visit_TRUE(self, node, children):
+    def visit_true(self, *_):
         """Return ``True`` for the string "true" (case insensitive)
 
         Arguments
         ---------
-        node : parsimonious.nodes.Node.
-        children : list, unused
+        _[0] (node) : parsimonious.nodes.Node.
+        _[1] (children) : list, unused
 
         Returns
         -------

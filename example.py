@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from datetime import datetime, date
 
 from dataql.parsers import DataQLParser
@@ -56,21 +58,22 @@ query = r'''
 User.get('Elon Musk') {
     name,
     birthday.strftime('%x'),
-    companies[
+    companies[{
         name,
-        date:created_year,
-    ]
+        year:created_year,
+    }],
+    company_names: companies[name],
+    first_company:companies.0.name,
 }
 '''
 
 # Get the result
-result = registry.solve(
+result = registry.solve_resource(
     # Values that can be called at the very first level
     EntryPoints(registry, User=User),
     # The parser is a standalone part
     DataQLParser(query).data
 )
-
 
 # Compare!
 assert result == {
@@ -79,11 +82,13 @@ assert result == {
     'companies': [
         {
             'name': 'Paypal',
-            'date': 1999
+            'year': 1999
         },
         {
             'name': 'Space X',
-            'date': 2002
+            'year': 2002
         }
-    ]
+    ],
+    'company_names': ['Paypal', 'Space X'],
+    'first_company': 'Paypal',
 }
