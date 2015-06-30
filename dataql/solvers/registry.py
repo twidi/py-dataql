@@ -46,6 +46,8 @@ from dataql.utils import class_repr
 class Attribute:
     """An object representing an attribute of a class or a standalone function.
 
+    The attribute can also be the key of a dict-like object.
+
     Attributes
     ----------
     name : string
@@ -132,19 +134,27 @@ class Attribute:
 
         >>> from datetime import date
         >>> d = date(2015, 6, 1)
-        >>> s = Source(date, ['day', 'strftime'])
         >>> Attribute('day').solve(d)
         1
         >>> Attribute('strftime').solve(d, ['%F'])
         '2015-06-01'
-        >>> Attribute('day').solve('a string')
+        >>> Attribute('day').solve('a string') # doctest: +ELLIPSIS
         Traceback (most recent call last):
-        AttributeError: 'str' object has no attribute 'day'
+        dataql...AttributeNotFound: `<Attribute 'day'>` is not an allowed attribute
         >>> Attribute('day').solve(d, ['foo'])
         Traceback (most recent call last):
         TypeError: 'int' object is not callable
         >>> Attribute('str', function=str).solve(d)
         '2015-06-01'
+
+        # Test the dict-like approach
+        >>> class MyDict(dict):
+        ...     foo = 1
+        >>> d = MyDict(bar=2)
+        >>> Attribute('foo').solve(d)
+        1
+        >>> Attribute('bar').solve(d)
+        2
 
         Example with callable
         ----------------------
@@ -265,7 +275,17 @@ class Attribute:
                 raise CallableError(self, value, args, kwargs, ex)
 
         # Manage a normal attribute.
-        result = getattr(value, self.name)
+        try:
+            # try to get an attribute.
+            result = getattr(value, self.name)
+        except AttributeError:
+            try:
+                # Attribute not found, try to get a key.
+                result = value[self.name]
+            except (TypeError, KeyError):
+                # No attribute, no key.
+                raise AttributeNotFound(self)
+
 
         # We make a call from the attribute in all cases if we have some arguments.
         if args is not None or kwargs is not None:
@@ -783,7 +803,11 @@ class Source:
             if attr is None:
                 raise AttributeNotFound(attribute, self)
 
-        return attr.solve(value, args, kwargs)
+        try:
+            return attr.solve(value, args, kwargs)
+        except AttributeNotFound:
+            # Raise an ``AttributeError`` with ``self`` as source.
+            raise AttributeNotFound(attr, self)
 
 
 class Registry(Mapping):
@@ -1264,6 +1288,23 @@ class Registry(Mapping):
         ... ))
         [['2015-06-01', {'day': 1, 'month': 6, 'year': 2015}],
          ['2015-06-03', {'day': 3, 'month': 6, 'year': 2015}]]
+
+        # Test the dict-like approach
+        >>> class MyDict(dict):
+        ...     foo = 1
+        ...     bar = 2
+        >>> registry.register(MyDict, ['foo', 'baz'])
+        >>> d = MyDict(baz=3, qux=4)
+        >>> registry.solve_resource(d, Field('foo'))
+        1
+        >>> registry.solve_resource(d, Field('bar'))  # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+        dataql...AttributeNotFound: `bar` is not an allowed attribute for `...MyDict`
+        >>> registry.solve_resource(d, Field('baz'))
+        3
+        >>> registry.solve_resource(d, Field('qux'))  # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+        dataql...AttributeNotFound: `qux` is not an allowed attribute for `...MyDict`
 
 
         # Example of ``SolveFailure`` exception.

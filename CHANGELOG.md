@@ -11,6 +11,7 @@ This project adheres to [PEP 440 about versioning](https://www.python.org/dev/pe
 - Better exceptions
 - Manage slicing/list indexing in filters
 - Change in the format for lists, allowing to return list of values, not only list of dicts
+- Access allowed dict items
 
 ## [0.0.1a1] - 2015-06-15
 - First working version

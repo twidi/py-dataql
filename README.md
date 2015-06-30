@@ -106,7 +106,7 @@ This prototype is working as expected, but there is a lot of things to do:
 - test on the the Django ORM (it should work)
 - create an advanced solver for Django (using `select_related` and `prefetch_related`)
 - ~~allow the use of filters that are not attributes of instances, but simple functions~~
-- allow the retrieval of ~~list entries~~ or dict entries, not only instance attributes
+- ~~allow the retrieval of list entries or dict entries, not only instance attributes~~
 - ~~allow returning lists of values, not only objects~~
 - tell me
 
