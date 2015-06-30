@@ -133,20 +133,43 @@ class Solver(metaclass=ABCMeta):
         >>> registry = Registry()
         >>> from datetime import date
         >>> registry.register(date, allow_class=True)
-        >>> registry.register(str, allow_class=True)
+        >>> registry.register(str)
         >>> class MySolver(Solver):
         ...     def cast(self, value, resource): return value
         >>> solver = MySolver(registry)
-        >>> from dataql.resources import Filter, NamedArg, PosArg
-        >>> solver.solve_value(date, Field('fromtimestamp',
+        >>> from dataql.resources import Filter, NamedArg, PosArg, SliceFilter
+        >>> field = Field(None,
         ...     filters=[
         ...         Filter(name='fromtimestamp', args=[PosArg(1433109600)]),
         ...         Filter(name='replace', args=[NamedArg('year', '=', 2014)]),
         ...         Filter(name='strftime', args=[PosArg('%F')]),
         ...         Filter(name='replace', args=[PosArg('2014'), PosArg('2015')]),
         ...     ]
-        ... ))
+        ... )
+        >>> solver.solve_value(date, field)
         '2015-06-01'
+        >>> solver.solve_value(None, field)
+
+        >>> d = {'foo': {'date': date(2015, 6, 1)}, 'bar': {'date': None}, 'baz': [{'date': None}]}
+        >>> registry.register(dict)
+        >>> solver.solve_value(d, Field(None, filters=[
+        ...     Filter(name='foo'),
+        ...     Filter(name='date'),
+        ...     Filter(name='strftime', args=[PosArg('%F')]),
+        ... ]))
+        '2015-06-01'
+        >>> solver.solve_value(d, Field(None, filters=[
+        ...     Filter(name='bar'),
+        ...     Filter(name='date'),
+        ...     Filter(name='strftime', args=[PosArg('%F')]),
+        ... ]))
+
+        >>> solver.solve_value(d, Field(None, filters=[
+        ...     Filter(name='baz'),
+        ...     SliceFilter(0),
+        ...     Filter(name='date'),
+        ...     Filter(name='strftime', args=[PosArg('%F')]),
+        ... ]))
 
         # Example of how to raise a ``CannotSolve`` exception.
         >>> from dataql.solvers.exceptions import CannotSolve
@@ -160,8 +183,11 @@ class Solver(metaclass=ABCMeta):
         result = value
 
         # Apply filters one by one on the previous result.
-        for filter_ in resource.filters:
-            result = self.registry.solve_filter(result, filter_)
+        if result is not None:
+            for filter_ in resource.filters:
+                result = self.registry.solve_filter(result, filter_)
+                if result is None:
+                    break
 
         return result
 

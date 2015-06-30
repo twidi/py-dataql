@@ -228,8 +228,11 @@ class SliceSolver(Solver):
         [2, 3]
         >>> solver.solve([1, 2, 3], SliceFilter(slice(0, 2, 2)))
         [1]
-
+        >>> solver.solve([1, 2, 3], SliceFilter(4))
 
         """
 
-        return value[filter_.slice or filter_.index]
+        try:
+            return value[filter_.slice or filter_.index]
+        except IndexError:
+            return None
