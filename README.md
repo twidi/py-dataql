@@ -66,7 +66,7 @@ This repository provides a [full, but simple, example](example.py)
 This library is available on pypi, but still in alpha version.
 
 ```
-pip install dataql==0.1
+pip install dataql
 ```
 
 ## Documentation
