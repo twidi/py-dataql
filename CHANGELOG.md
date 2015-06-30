@@ -2,7 +2,7 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [PEP 440 about versioning](https://www.python.org/dev/peps/pep-0440/#pre-releases).
 
-## [Unreleased][unreleased]
+## [0.1.1] - 2015-06-30
 ### Added
 - Manage `None` values (abort filtering, etc, ans simply return `None`)
 
