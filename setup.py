@@ -1,12 +1,28 @@
 #!/usr/bin/env python
 
-import ast, codecs, os
+import ast
+
+import codecs
+import os
+
 from pip.req import parse_requirements
 from setuptools import setup, find_packages
+
 
 # Configuration
 package_name = 'dataql'
 long_doc_file = 'DESCRIPTION.rst'
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.4",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 
 # Code
 # The `session` argument for the `parse_requirements` function is available (but
@@ -18,32 +34,43 @@ except ImportError:
 else:
     parse_args = {'session': PipSession()}
 
+
 def get_requirements(source):
     install_reqs = parse_requirements(source, **parse_args)
     return set([str(ir.req) for ir in install_reqs])
+
 
 class VersionFinder(ast.NodeVisitor):
     def __init__(self):
         self.data = {}
 
     def visit_Assign(self, node):
-        if node.targets[0].id in ('__version__', '__author__', '__contact__', '__homepage__'):
-          self.data[node.targets[0].id[2:-2]] = node.value.s
+        if node.targets[0].id in (
+                '__version__',
+                '__author__',
+                '__contact__',
+                '__homepage__',
+                '__license__',
+        ):
+            self.data[node.targets[0].id[2:-2]] = node.value.s
+
 
 def read(*path_parts):
     filename = os.path.join(os.path.dirname(__file__), *path_parts)
     with codecs.open(filename, encoding='utf-8') as fp:
         return fp.read()
 
-def find_infos(*path_parts):
+
+def find_info(*path_parts):
     finder = VersionFinder()
     node = ast.parse(read(*path_parts))
     finder.visit(node)
-    infos = finder.data
-    infos['docstring'] = ast.get_docstring(node)
-    return infos
+    info = finder.data
+    info['docstring'] = ast.get_docstring(node)
+    return info
 
-package_info = find_infos(package_name, '__init__.py')
+
+package_info = find_info(package_name, '__init__.py')
 
 setup(
     name=package_name,
@@ -56,4 +83,6 @@ setup(
     author=package_info['author'],
     author_email=package_info['contact'],
     install_requires=get_requirements('requirements.txt'),
+    license=package_info['license'],
+    classifiers=classifiers,
 )
