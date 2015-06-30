@@ -396,7 +396,7 @@ class DataQLParser(FiltersWithSlicingParserMixin, BaseParser):
         """
 
         filters = children[0]
-        return self.Field(filters[0].name, filters=filters)
+        return self.Field(getattr(filters[0], 'name', None), filters=filters)
 
     @rule('FILTERS OBJECT')
     def visit_named_object(self, _, children):
