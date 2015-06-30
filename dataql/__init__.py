@@ -3,6 +3,7 @@
 __author__ = 'Stephane "Twidi" Angel'
 __contact__ = 's.angel@twidi.com'
 __homepage__ = 'https://github.com/twidi/py-dataql'
+__license__ = 'BSD'
 
-__version__ = '0.0.1a1'
+__version__ = '0.1'
 VERSION = tuple(__version__.split('.'))
