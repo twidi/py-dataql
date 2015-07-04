@@ -2,7 +2,7 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [PEP 440 about versioning](https://www.python.org/dev/peps/pep-0440/#pre-releases).
 
-## [0.1.2]
+## [0.1.3]
 ###Fixed
 - Package is now installable!
 
