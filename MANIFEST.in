@@ -1,2 +1,3 @@
 include DESCRIPTION.rst
-incluse LICENSE
+include requirements.txt
+include LICENSE
