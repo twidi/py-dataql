@@ -34,7 +34,7 @@ class Solver(metaclass=ABCMeta):
 
     Notes
     -----
-    The ``solve`` method simply calls ``solve_value``, then ``cast`` with the result.
+    The ``solve`` method simply calls ``solve_value``, then ``coerce`` with the result.
     To change the behavior, simply override at least one of these two methods.
 
     """
@@ -69,7 +69,7 @@ class Solver(metaclass=ABCMeta):
         >>> from datetime import date
         >>> registry.register(date, allow_class=True)
         >>> class MySolver(Solver):
-        ...     def cast(self, value, resource): return value
+        ...     def coerce(self, value, resource): return value
         >>> MySolver(registry)
         <MySolver>
 
@@ -91,7 +91,7 @@ class Solver(metaclass=ABCMeta):
 
         Returns
         -------
-        (depends on the implementation of the ``cast`` method)
+        (depends on the implementation of the ``coerce`` method)
 
         Raises
         ------
@@ -101,16 +101,16 @@ class Solver(metaclass=ABCMeta):
 
         Notes
         -----
-        This method simply calls ``solve_value``, then ``cast`` with the result.
+        This method simply calls ``solve_value``, then ``coerce`` with the result.
         To change the behavior, simply override at least one of these two methods.
 
         """
 
         result = self.solve_value(value, resource)
-        return self.cast(result, resource)
+        return self.coerce(result, resource)
 
     def solve_value(self, value, resource):
-        """Solve a resource with a value, without casting.
+        """Solve a resource with a value, without coercing.
 
         Arguments
         ---------
@@ -135,7 +135,7 @@ class Solver(metaclass=ABCMeta):
         >>> registry.register(date, allow_class=True)
         >>> registry.register(str)
         >>> class MySolver(Solver):
-        ...     def cast(self, value, resource): return value
+        ...     def coerce(self, value, resource): return value
         >>> solver = MySolver(registry)
         >>> from dataql.resources import Filter, NamedArg, PosArg, SliceFilter
         >>> field = Field(None,
@@ -192,7 +192,7 @@ class Solver(metaclass=ABCMeta):
         return result
 
     @abstractmethod
-    def cast(self, value, resource):
+    def coerce(self, value, resource):
         """Convert the value got after ``solve_value``.
 
         Must be implemented in subclasses.
@@ -258,8 +258,8 @@ class AttributeSolver(Solver):
 
     solvable_resources = (Field,)
 
-    def cast(self, value, resource):
-        """Cast the value to an acceptable one.
+    def coerce(self, value, resource):
+        """Coerce the value to an acceptable one.
 
         Only these kinds of values are returned as is:
         - str
@@ -269,20 +269,20 @@ class AttributeSolver(Solver):
         - False
         - None
 
-        For all others values, it will be casted using ``self.cast_default`` (with convert the
+        For all others values, it will be coerced using ``self.coerce_default`` (with convert the
         value to a string in the default implementation).
 
         Arguments
         ---------
         value : ?
-            The value to be casted.
+            The value to be coerced.
         resource : dataql.resources.Resource
             The ``Resource`` object used to obtain this value from the original one.
 
         Returns
         -------
         str | int | float | True | False | None
-            The casted value.
+            The coerced value.
 
         Example
         -------
@@ -292,19 +292,19 @@ class AttributeSolver(Solver):
         >>> from datetime import date
         >>> registry.register(date)
         >>> solver = AttributeSolver(registry)
-        >>> solver.cast('foo', None)
+        >>> solver.coerce('foo', None)
         'foo'
-        >>> solver.cast(11, None)
+        >>> solver.coerce(11, None)
         11
-        >>> solver.cast(1.1, None)
+        >>> solver.coerce(1.1, None)
         1.1
-        >>> solver.cast(True, None)
+        >>> solver.coerce(True, None)
         True
-        >>> solver.cast(False, None)
+        >>> solver.coerce(False, None)
         False
-        >>> solver.cast(date(2015, 6, 1), None)
+        >>> solver.coerce(date(2015, 6, 1), None)
         '2015-06-01'
-        >>> solver.cast(None, None)
+        >>> solver.coerce(None, None)
 
         """
         if value in (True, False, None):
@@ -313,22 +313,22 @@ class AttributeSolver(Solver):
             return value
         if isinstance(value, str):
             return value
-        return self.cast_default(value, resource)
+        return self.coerce_default(value, resource)
 
-    def cast_default(self, value, resource):
-        """Cast a value using a default converter, ``str()``.
+    def coerce_default(self, value, resource):
+        """Coerce a value using a default converter, ``str()``.
 
         Arguments
         ---------
         value : ?
-            The value to be casted.
+            The value to be coerced.
         resource : dataql.resources.Resource
             The ``Resource`` object used to obtain this value from the original one.
 
         Returns
         -------
         str
-            The casted value.
+            The coerced value.
 
         Example
         -------
@@ -338,9 +338,9 @@ class AttributeSolver(Solver):
         >>> from datetime import date
         >>> registry.register(date)
         >>> solver = AttributeSolver(registry)
-        >>> solver.cast_default(date(2015, 6, 1), None)
+        >>> solver.coerce_default(date(2015, 6, 1), None)
         '2015-06-01'
-        >>> solver.cast_default(date, None)
+        >>> solver.coerce_default(date, None)
         "<class 'datetime.date'>"
 
         """
@@ -379,7 +379,7 @@ class ObjectSolver(Solver):
 
     solvable_resources = (Object,)
 
-    def cast(self, value, resource):
+    def coerce(self, value, resource):
         """Get a dict with attributes from ``value``.
 
         Arguments
@@ -464,7 +464,7 @@ class ListSolver(Solver):
 
     solvable_resources = (List,)
 
-    def cast(self, value, resource):
+    def coerce(self, value, resource):
         """Convert a list of objects in a list of dicts.
 
         Arguments

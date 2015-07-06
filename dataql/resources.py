@@ -7,7 +7,7 @@ We have three resources. Each one has a name, and filters (subclasses of ``BaseF
 
 The three resources are:
 
-- ``Field`` : a simple field. A parser may cast it into a simple value (string, number, null,
+- ``Field`` : a simple field. A parser may coerce it into a simple value (string, number, null,
               false or true)
 - ``Object`` : the value is an object from which we want some fields.
 - ``List`` : the value is an iterable, and for each entry we want some fields
@@ -19,7 +19,7 @@ A ``Filter`` may be an attribute, that may be callable (which can have arguments
 (``NamedArg`` and ``PosArg``), but it could also be a standalone function (taking the value
 as first argument, and then the other arguments)
 A ``SliceFilter`` allows to retrieve one or more entries of an iterable.
-When all filters are applied, the final value is casted (number, string... for ``Field``,
+When all filters are applied, the final value is coerced (number, string... for ``Field``,
 dictionary for ``Object`` and list for ``List``).
 
 
