@@ -149,7 +149,33 @@ class NamedArgsParserMixin(BaseParser, metaclass=ABCMeta):
 
         return children
 
-    @rule('IDENT WS OPER WS VALUE')
+    @rule('OPER')
+    def visit_args_oper(self, _, children):
+        """Operator to separate argument name and value.
+
+        Arguments
+        ---------
+        _ (node) : parsimonious.nodes.Node.
+        children : str
+            - 0: The operator as a string.
+
+        -------
+        str
+            The operator as a string.
+
+        Example
+        -------
+
+        >>> NamedArgsParserMixin('=', default_rule='ARGS_OPER').data
+        '='
+        >>> NamedArgsParserMixin(':', default_rule='ARGS_OPER').data
+        '='
+
+        """
+
+        return children[0]
+
+    @rule('IDENT WS ARGS_OPER WS VALUE')
     def visit_named_arg(self, _, children):
         """Named argument of a filter.
 
@@ -410,8 +436,8 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser,
 
         Returns
         -------
-        list(.resources.NamedArg)
-            List of  instances of ``.resources.NamedArg`` or subclasses.
+        list(.resources.Arg)
+            List of  instances of subclasses of ``.resources.NamedArg``.
 
         Example
         -------
@@ -437,12 +463,12 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser,
         ---------
         _ (node) : parsimonious.nodes.Node.
         children : list
-            - 1: list of instances of ``.resources.NamedArg`` or subclasses.
+            - 1: list of instances of subclasses of ``.resources.Arg``.
 
         Returns
         -------
-        list(.resources.NamedArg)
-            List of  instances of ``.resources.NamedArg`` or subclasses.
+        list(.resources.Arg)
+            List of  instances of subclasses of ``.resources.Arg``.
 
         Example
         -------
@@ -475,12 +501,12 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser,
         ---------
         _ (node) : parsimonious.nodes.Node.
         children : list
-            - 0: list of instances of ``.resources.NamedArg`` or subclasses.
+            - 0: list of instances of subclasses of ``.resources.Arg``.
 
         Returns
         -------
-        list(.resources.NamedArg)
-            List of  instances of ``.resources.NamedArg`` or subclasses.
+        list(.resources.Arg)
+            List of  instances of subclasses of ``.resources.Arg``.
 
         Example
         -------
@@ -515,8 +541,8 @@ class ArgsParserMixin(NamedArgsParserMixin, UnnamedArgsParserMixin, BaseParser,
 
         Returns
         -------
-        list(.resources.NamedArg)
-            List of  instances of ``.resources.NamedArg`` or subclasses.
+        list(.resources.Arg)
+            List of  instances of subclasses of ``.resources.Arg``.
 
         Example
         -------

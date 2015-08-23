@@ -286,7 +286,6 @@ class Attribute:
                 # No attribute, no key.
                 raise AttributeNotFound(self)
 
-
         # We make a call from the attribute in all cases if we have some arguments.
         if args is not None or kwargs is not None:
             result = result(*(args or []), **(kwargs or {}))
@@ -579,10 +578,12 @@ def EntryPoints(registry, **kwargs):
     Example
     -------
 
-    >>> from datetime import date
+    >>> from datetime import date, timedelta
     >>> registry = Registry()
     >>> registry.register(date, ['strftime'])
-    >>> entry_points = EntryPoints(registry, today=date(2015, 6, 1))
+    >>> entry_points = EntryPoints(registry,
+    ...     today=date(2015, 6, 1),
+    ...     in_days=lambda days: date(2015, 6, 1)+timedelta(days=days))
     >>> from dataql.resources import *
     >>> resource = Field('today', filters=[
     ...     Filter('today'),
@@ -590,6 +591,11 @@ def EntryPoints(registry, **kwargs):
     ... ])
     >>> registry.solve_resource(entry_points, resource)
     '2015-06-01'
+    >>> registry.solve_resource(entry_points, Field('tomorrow', filters=[
+    ...     Filter('in_days', args=[NamedArg('days', '=', 1)]),
+    ...     Filter('strftime', args=[PosArg('%F')]),
+    ... ]))
+    '2015-06-02'
 
     Notes
     -----
@@ -598,7 +604,11 @@ def EntryPoints(registry, **kwargs):
 
     """
 
-    klass = type('EntryPoints', (BaseEntryPoints, ), kwargs)
+    # We convert functions to staticmethod as they will be held by a class and
+    # we don't want them to expect a ``self`` or ``cls`` argument.
+    attrs = {k: (staticmethod(v) if isfunction(v) else v) for k, v in kwargs.items()}
+
+    klass = type('EntryPoints', (BaseEntryPoints, ), attrs)
     registry.register(klass, kwargs.keys())
     return klass()
 
