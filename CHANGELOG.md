@@ -2,8 +2,19 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [PEP 440 about versioning](https://www.python.org/dev/peps/pep-0440/#pre-releases).
 
-## [0.1.3]
-###Fixed
+## [0.1.4] - 2015-08-23
+### Added
+Small updates for `graphql-server`
+
+- Subclasses of `NamedArg` can now customize the operator
+- Use the term "coerce" instead of "cast"
+- Add a parent class for all resources & co
+
+### Fixed
+- Make functions work in EntryPoints 
+
+## [0.1.3] - 2015-07-04
+### Fixed
 - Package is now installable!
 
 ## [0.1.1] - 2015-06-30 [YANKED]
