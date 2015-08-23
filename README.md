@@ -12,6 +12,9 @@ I didn't want to force people to think "graph", and I chose a language that is d
 ways. But this library is written with a base, and we provide a generic parser, but other parsers
 could easily be written!
 
+But I have an [implementation of a GraphQL server in python](https://github.com/twidi/py-graphql-server),
+using `dataql`. The main difference is that it's strongly typed compared to `dataql`.
+
 ## How it works?
 
 For example, the default generic parser included, `DataQLParser`, allows to ask for data
@@ -78,21 +81,21 @@ using "[Numpydoc](https://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.
 ---------------------------------------------------------------------------
 File                                   blank        comment           code
 ---------------------------------------------------------------------------
-./__init__.py                              2              1              5
+./__init__.py                              2              1              6
 ./exceptions.py                            5              5              3
 ./parsers/__init__.py                      4              4              1
 ./parsers/base.py                        142            383            120
 ./parsers/exceptions.py                   13             13             15
 ./parsers/generic.py                     150            477             86
-./parsers/mixins.py                      268            778            110
-./resources.py                           144            266            168
+./parsers/mixins.py                      275            794            113
+./resources.py                           149            261            161
 ./solvers/exceptions.py                   91            112            140
-./solvers/filters.py                      63            145             27
-./solvers/registry.py                    259            905            213
-./solvers/resources.py                   110            316             55
+./solvers/filters.py                      62            146             30
+./solvers/registry.py                    259            914            214
+./solvers/resources.py                   112            339             58
 ./utils.py                                 6             20              5
 ---------------------------------------------------------------------------
-SUM:                                    1257           3425            948
+SUM:                                    1270           3469            952
 ---------------------------------------------------------------------------
 ```
 
@@ -122,7 +125,7 @@ You can launch all these doctests this way (at the root of the repository) :
 
 ```sh
 ./run_tests.sh
-Ran 109 tests in 0.303s
+Ran 110 tests in 0.207s
 
 OK
 ```
