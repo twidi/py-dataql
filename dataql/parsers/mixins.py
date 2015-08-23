@@ -150,7 +150,7 @@ class NamedArgsParserMixin(BaseParser, metaclass=ABCMeta):
         return children
 
     @rule('OPER')
-    def visit_args_oper(self, node, children):
+    def visit_args_oper(self, _, children):
         """Operator to separate argument name and value.
 
         Arguments

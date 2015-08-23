@@ -448,7 +448,9 @@ class ListSolver(Solver):
 
         >>> pprint(solver.solve(
         ...     obj,
-        ...     List('dates', resources=[Object(None, resources=[Field('day'), Field('month'), Field('year')])])
+        ...     List('dates', resources=[
+        ...         Object(None, resources=[Field('day'),Field('month'), Field('year')])
+        ...     ])
         ... ))
         [{'day': 1, 'month': 6, 'year': 2015}, {'day': 2, 'month': 6, 'year': 2015}]
 
