@@ -7,7 +7,7 @@ We have three resources. Each one has a name, and filters (subclasses of ``BaseF
 
 The three resources are:
 
-- ``Field`` : a simple field. A parser may cast it into a simple value (string, number, null,
+- ``Field`` : a simple field. A parser may coerce it into a simple value (string, number, null,
               false or true)
 - ``Object`` : the value is an object from which we want some fields.
 - ``List`` : the value is an iterable, and for each entry we want some fields
@@ -19,7 +19,7 @@ A ``Filter`` may be an attribute, that may be callable (which can have arguments
 (``NamedArg`` and ``PosArg``), but it could also be a standalone function (taking the value
 as first argument, and then the other arguments)
 A ``SliceFilter`` allows to retrieve one or more entries of an iterable.
-When all filters are applied, the final value is casted (number, string... for ``Field``,
+When all filters are applied, the final value is coerced (number, string... for ``Field``,
 dictionary for ``Object`` and list for ``List``).
 
 
@@ -38,7 +38,49 @@ __all__ = ('Field', 'List', 'Object', 'Filter', 'NamedArg', 'PosArg')
 from abc import ABCMeta
 
 
-class Resource(metaclass=ABCMeta):
+class WithParent(metaclass=ABCMeta):
+    """`Something` that have a parent. Used by all classes in this module.
+
+    Also allow to compute the "level" in the tree (for rendering indentation for example)
+
+    Attributes
+    ----------
+    parent : Resource, or None
+        Back reference to the parent resource. ``None`` if it's the root resource.
+
+
+    """
+
+    __slots__ = (
+        'parent',
+    )
+
+    def __init__(self):
+        """Set the parent to be ``None`` by default."""
+
+        self.parent = None
+
+    def set_parent(self, parent):
+        """Set the given parent as the parent resource."""
+
+        self.parent = parent
+
+    def get_level(self):
+        """Return the level in the resources hierarchy. Mainly used for display.
+
+        Returns
+        -------
+        int
+            The level in the hierarchy, ``0`` for the root level, one more for each level.
+
+        """
+
+        if self.parent:
+            return self.parent.get_level() + 1
+        return 0
+
+
+class Resource(WithParent, metaclass=ABCMeta):
     """Base class for all resource classes.
 
     A resource is a name and some filters.
@@ -57,16 +99,13 @@ class Resource(metaclass=ABCMeta):
         applied to the value passed to the solver) If no filter was given on ``__init__``, a
         filter will be added with the name of the resource (to fetch this name as an attribute
         during solving)
-    parent : Resource, or None
-        Back reference to the parent resource. ``None`` if it's the root resource.
 
     """
 
-    __slots__ = (
+    __slots__ = WithParent.__slots__ + (
         'name',
         'is_root',
         'filters',
-        'parent',
     )
 
     def __init__(self, name, filters=None, is_root=False):
@@ -83,11 +122,11 @@ class Resource(metaclass=ABCMeta):
 
         """
 
+        super().__init__()
+
         self.name = name
         self.is_root = is_root
         self.filters = filters or []
-
-        self.parent = None
 
         if not self.filters and self.name:
             self.filters = [Filter(name=self.name)]
@@ -131,25 +170,6 @@ class Resource(metaclass=ABCMeta):
             'indent': '  ' * self.get_level(),
         }
         return result
-
-    def set_parent(self, parent):
-        """Set the given parent as the parent resource."""
-
-        self.parent = parent
-
-    def get_level(self):
-        """Return the level in the resources hierarchy. Mainly used for display.
-
-        Returns
-        -------
-        int
-            The level in the hierarchy, ``0`` for the root level, one more for each level.
-
-        """
-
-        if self.parent:
-            return self.parent.get_level() + 1
-        return 0
 
 
 class Field(Resource):
@@ -254,29 +274,12 @@ class Object(MultiResources):
     pass
 
 
-class BaseFilter(metaclass=ABCMeta):
+class BaseFilter(WithParent, metaclass=ABCMeta):
     """A filter is "something" to apply to a value to get another value.
 
     This base class is to be used to all filters.
 
-    Attributes
-    ----------
-    parent : Resource
-        The ``Resource`` subclass instance having this filter.
-
     """
-
-    __slots__ = (
-        'parent',
-    )
-
-    def __init__(self):
-        """Set the ``parent`` attribute to ``None``."""
-        self.parent = None
-
-    def set_parent(self, parent):
-        """Set the given parent as the parent resource."""
-        self.parent = parent
 
 
 class Filter(BaseFilter):
@@ -292,15 +295,12 @@ class Filter(BaseFilter):
     args : list, optional
         List of arguments to pass to the attribute if callable. If ``None``, the attribute is
         assumed not to be callable.
-    parent : Resource
-        The ``Resource`` subclass instance having this filter.
 
     """
 
-    __slots__ = (
+    __slots__ = BaseFilter.__slots__ + (
         'name',
         'args',
-        'parent',
     )
 
     def __init__(self, name, args=None):
@@ -392,15 +392,12 @@ class SliceFilter(BaseFilter):
         A ``slice`` object with its attributes: ``start``, ``stop``, ``step``.
     index : int
         An integer for a simple item retrieval
-    parent : Resource
-        The ``Resource`` subclass instance having this slice-filter.
 
     """
 
-    __slots__ = (
+    __slots__ = BaseFilter.__slots__ + (
         'slice',
         'index',
-        'parent'
     )
 
     def __init__(self, slice_info):
@@ -473,7 +470,7 @@ class SliceFilter(BaseFilter):
             )
 
 
-class Arg:
+class Arg(WithParent):
     """Base class for resource or filter arguments.
 
     Attributes
@@ -487,11 +484,11 @@ class Arg:
         The value of the argument.
 
     """
-    __slots__ = (
+
+    __slots__ = WithParent.__slots__ + (
         'arg',
         'type',
         'value',
-        'parent',
     )
 
     def __init__(self, arg, arg_type, value):
@@ -508,11 +505,11 @@ class Arg:
 
         """
 
+        super().__init__()
+
         self.arg = arg
         self.type = arg_type
         self.value = value
-
-        self.parent = None
 
     def __repr__(self):
         """String representation of an ``Arg`` instance.
@@ -545,10 +542,6 @@ class Arg:
             'type': self.type,
             'value': value,
         }
-
-    def set_parent(self, parent):
-        """Set the given parent as the parent resource."""
-        self.parent = parent
 
     @property
     def is_named(self):
